@@ -1,0 +1,10 @@
+REGION_API_URL:
+  "US-1 or us-west-2": "https://us-west-2-api.cloudconformity.com/v1"
+  "Canada (ca-1)": "https://ca-central-1-api.cloudconformity.com/v1"
+  "Singapore (sg-1)": "https://ap-southeast-1-api.cloudconformity.com/v1"
+  "Japan (jp-1)": "https://ap-northeast-1-api.cloudconformity.com/v1"
+  "Germany (de-1)": "https://eu-central-1-api.cloudconformity.com/v1"
+  "eu-west-1": "https://eu-west-1-api.cloudconformity.com/v1"
+  "eu-west-2": "https://eu-west-2-api.cloudconformity.com/v1"
+  "ap-southeast-2": "https://ap-southeast-2-api.cloudconformity.com/v1"
+  "ap-south-1": "https://ap-south-1-api.cloudconformity.com/v1"
