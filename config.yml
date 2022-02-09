@@ -8,3 +8,5 @@ REGION_API_URL:
   "eu-west-2": "https://eu-west-2-api.cloudconformity.com/v1"
   "ap-southeast-2": "https://ap-southeast-2-api.cloudconformity.com/v1"
   "ap-south-1": "https://ap-south-1-api.cloudconformity.com/v1"
+
+BOT_SCAN_CHECK_INTERVAL_IN_SECS: 15

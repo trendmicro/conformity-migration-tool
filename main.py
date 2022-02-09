@@ -1,4 +1,5 @@
 import os
+import time
 import json
 from typing import Dict, List, Set, Iterable
 import yaml
@@ -6,7 +7,7 @@ import yaml
 from PyInquirer import prompt
 from service import ConformityService
 from cloud_accounts import get_cloud_account_adder
-from models import Group, User, CommunicationSettings
+from models import Check, Group, User, CommunicationSettings
 
 
 def get_conf() -> dict:
@@ -342,6 +343,71 @@ def migrate_account_configurations(
         c1_org_id=c1_org_id,
     )
     print(" - Done")
+
+    print("  --> Waiting for bot scan to finish ", end="", flush=True)
+    wait_for_bot_scan_to_finish(c1_svc=c1_svc, acct_id=c1_acct_id)
+    print(" - Done")
+
+    print("  --> Copying suppressed checks")
+    copy_suppressed_checks(
+        legacy_svc=legacy_svc,
+        c1_svc=c1_svc,
+        legacy_acct_id=legacy_acct_id,
+        c1_acct_id=c1_acct_id,
+    )
+
+
+def wait_for_bot_scan_to_finish(c1_svc: ConformityService, acct_id: str):
+    while not c1_svc.is_bot_scan_done(acct_id=acct_id):
+        print(".", end="", flush=True)
+        time.sleep(APP_CONF["BOT_SCAN_CHECK_INTERVAL_IN_SECS"])
+        continue
+
+
+def copy_suppressed_checks(
+    legacy_svc: ConformityService,
+    c1_svc: ConformityService,
+    legacy_acct_id: str,
+    c1_acct_id: str,
+):
+    legacy_checks = legacy_svc.get_suppressed_checks(acct_id=legacy_acct_id)
+    total_checks = 0
+    for legacy_check in legacy_checks:
+        total_checks += 1
+        print(
+            f"    --> {legacy_check.rule_id}|{legacy_check.region}|{legacy_check.resource_name}|{legacy_check.resource}",
+            flush=True,
+        )
+        filters = {
+            "ruleIds": [legacy_check.rule_id],
+            "regions": [legacy_check.region],
+        }
+        if legacy_check.resource:
+            filters["resourceSearchMode"] = "text"
+            filters["resource"] = legacy_check.resource
+        c1_checks = list(c1_svc.get_checks(acct_id=c1_acct_id, filters=filters))
+        c1_checks_map = {c: c for c in c1_checks}
+        c1_check = c1_checks_map.get(legacy_check)
+        if c1_check is None:
+            show_instructions_for_missing_check(legacy_check)
+            continue
+        c1_svc.suppress_check(
+            check_id=c1_check.check_id, suppressed_until=c1_check.suppressed_until
+        )
+    if not total_checks:
+        print("    --> No suppressed check found.")
+
+
+def show_instructions_for_missing_check(check: Check):
+    print(
+        f"""
+    Can't find the corresponding check in CloudOne. Please manually suppress the check below or try re-running this tool.
+        RuleID: {check.rule_id}
+        Region: {check.region}
+        Resource: {check.resource}
+        Message: {check.message}
+"""
+    )
 
 
 def invite_missing_users(legacy_users: List[User], c1_users: List[User]):
