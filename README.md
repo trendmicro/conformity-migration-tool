@@ -48,4 +48,4 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 - [ ] Profiles
 - [ ] Report Configs
 - [X] Checks
-  - **API Limitation:** Notes cannot be ccopied to checks yet.
+  - **API Limitation:** Notes cannot be copied to checks yet.

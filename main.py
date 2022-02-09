@@ -198,7 +198,7 @@ def add_managed_groups(legacy_svc: ConformityService, c1_svc: ConformityService)
             directory_name = mg.name
             directory_id = azure_conf["directoryId"]
             app_client_id = azure_conf["applicationId"]
-            app_client_key = promp_azure_app_client_id(
+            app_client_key = prompt_azure_app_client_id(
                 directory_name, directory_id, app_client_id
             )
             c1_svc.create_azure_directory(
@@ -209,7 +209,7 @@ def add_managed_groups(legacy_svc: ConformityService, c1_svc: ConformityService)
             )
 
 
-def promp_azure_app_client_id(directory_name, directory_id, app_client_id) -> str:
+def prompt_azure_app_client_id(directory_name, directory_id, app_client_id) -> str:
     print(
         f"""
 Please enter the App registration key for the following Active Directory:
@@ -344,17 +344,20 @@ def migrate_account_configurations(
     )
     print(" - Done")
 
-    print("  --> Waiting for bot scan to finish ", end="", flush=True)
-    wait_for_bot_scan_to_finish(c1_svc=c1_svc, acct_id=c1_acct_id)
-    print(" - Done")
+    if has_suppressed_check(legacy_svc=legacy_svc, acct_id=legacy_acct_id):
+        print("  --> Waiting for bot scan to finish ", end="", flush=True)
+        wait_for_bot_scan_to_finish(c1_svc=c1_svc, acct_id=c1_acct_id)
+        print(" - Done")
 
-    print("  --> Copying suppressed checks")
-    copy_suppressed_checks(
-        legacy_svc=legacy_svc,
-        c1_svc=c1_svc,
-        legacy_acct_id=legacy_acct_id,
-        c1_acct_id=c1_acct_id,
-    )
+        print("  --> Copying suppressed checks")
+        copy_suppressed_checks(
+            legacy_svc=legacy_svc,
+            c1_svc=c1_svc,
+            legacy_acct_id=legacy_acct_id,
+            c1_acct_id=c1_acct_id,
+        )
+    else:
+        print("  --> No suppressed check found to migrate")
 
 
 def wait_for_bot_scan_to_finish(c1_svc: ConformityService, acct_id: str):
@@ -364,6 +367,11 @@ def wait_for_bot_scan_to_finish(c1_svc: ConformityService, acct_id: str):
         continue
 
 
+def has_suppressed_check(legacy_svc: ConformityService, acct_id: str) -> bool:
+    checks = legacy_svc.get_suppressed_checks(acct_id=acct_id, limit=1)
+    return len(list(checks)) > 0
+
+
 def copy_suppressed_checks(
     legacy_svc: ConformityService,
     c1_svc: ConformityService,
@@ -371,9 +379,7 @@ def copy_suppressed_checks(
     c1_acct_id: str,
 ):
     legacy_checks = legacy_svc.get_suppressed_checks(acct_id=legacy_acct_id)
-    total_checks = 0
     for legacy_check in legacy_checks:
-        total_checks += 1
         print(
             f"    --> {legacy_check.rule_id}|{legacy_check.region}|{legacy_check.resource_name}|{legacy_check.resource}",
             flush=True,
@@ -392,10 +398,8 @@ def copy_suppressed_checks(
             show_instructions_for_missing_check(legacy_check)
             continue
         c1_svc.suppress_check(
-            check_id=c1_check.check_id, suppressed_until=c1_check.suppressed_until
+            check_id=c1_check.check_id, suppressed_until=legacy_check.suppressed_until
         )
-    if not total_checks:
-        print("    --> No suppressed check found.")
 
 
 def show_instructions_for_missing_check(check: Check):

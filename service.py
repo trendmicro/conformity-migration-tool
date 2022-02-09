@@ -344,13 +344,23 @@ class ConformityService:
         )
         return res["data"]
 
+    def _limit_reached(self, limit, total) -> bool:
+        is_limited: bool = limit > 0
+        limit_reached = is_limited and total >= limit
+        # if limit_reached:
+        #     print("Limit reached!")
+        return limit_reached
+
     def get_checks(
-        self, acct_id: str, filters: Optional[Dict[str, Any]] = None
+        self, acct_id: str, filters: Optional[Dict[str, Any]] = None, limit=0
     ) -> Iterable[Check]:
+
+        page_size_max = 100
+        page_size = limit if (0 < limit < page_size_max) else page_size_max
 
         params = {
             "accountIds": acct_id,
-            "page[size]": 100,
+            "page[size]": page_size,
         }
         if filters:
             for filter_name, filter_val in filters.items():
@@ -380,17 +390,25 @@ class ConformityService:
                     suppressed=attrib.get("suppressed"),
                     suppressed_until=attrib.get("suppressed-until"),
                 )
-            total_items += len(data)
+                total_items += 1
+                if self._limit_reached(limit, total_items):
+                    break
+
             meta = res["meta"]
             # print(meta)
             # print(f"total_items: {total_items}")
+            if self._limit_reached(limit, total_items):
+                break
+
             if total_items >= meta["total"]:
                 break
             page_num += 1
 
-    def get_suppressed_checks(self, acct_id: str) -> Iterable[Check]:
+    def get_suppressed_checks(self, acct_id: str, limit=0) -> Iterable[Check]:
         return self.get_checks(
-            acct_id=acct_id, filters={"suppressed": True, "suppressedFilterMode": "v2"}
+            acct_id=acct_id,
+            filters={"suppressed": True, "suppressedFilterMode": "v2"},
+            limit=limit,
         )
 
     def suppress_check(
