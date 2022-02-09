@@ -1,7 +1,9 @@
-from typing import List
+from urllib.parse import quote
+from typing import List, Iterable, Optional, Dict, Any
 import json
+
 import requests
-from models import User, Group, CommunicationSettings
+from models import User, Group, CommunicationSettings, Check
 
 
 class ConformityService:
@@ -341,3 +343,78 @@ class ConformityService:
             },
         )
         return res["data"]
+
+    def get_checks(
+        self, acct_id: str, filters: Optional[Dict[str, Any]] = None
+    ) -> Iterable[Check]:
+
+        params = {
+            "accountIds": acct_id,
+            "page[size]": 100,
+        }
+        if filters:
+            for filter_name, filter_val in filters.items():
+                params[f"filter[{filter_name}]"] = filter_val
+
+        total_items = 0
+        page_num = 0
+        while True:
+            params["page[number]"] = page_num
+            res = self._get_request(
+                f"{self._base_url}/checks",
+                params=params,
+            )
+            data = res["data"]
+            for c in data:
+                attrib: dict = c["attributes"]
+                region = attrib["region"]
+                resource_name = attrib.get("resourceName", "")
+                resource = attrib.get("resource", "")
+                yield Check(
+                    check_id=c["id"],
+                    rule_id=c["relationships"]["rule"]["data"]["id"],
+                    region=region,
+                    resource_name=resource_name,
+                    resource=resource,
+                    message=attrib["message"],
+                    suppressed=attrib.get("suppressed"),
+                    suppressed_until=attrib.get("suppressed-until"),
+                )
+            total_items += len(data)
+            meta = res["meta"]
+            # print(meta)
+            # print(f"total_items: {total_items}")
+            if total_items >= meta["total"]:
+                break
+            page_num += 1
+
+    def get_suppressed_checks(self, acct_id: str) -> Iterable[Check]:
+        return self.get_checks(
+            acct_id=acct_id, filters={"suppressed": True, "suppressedFilterMode": "v2"}
+        )
+
+    def suppress_check(
+        self, check_id: str, suppressed_until: Optional[int], note="Copied from API"
+    ):
+        res = self._patch_request(
+            url=f"{self._base_url}/checks/{quote(check_id, safe='')}",
+            data={
+                "data": {
+                    "type": "checks",
+                    "attributes": {
+                        "suppressed": True,
+                        "suppressed-until": suppressed_until,
+                    },
+                },
+                "meta": {
+                    "note": note,
+                },
+            },
+        )
+        return res["data"]
+
+    def is_bot_scan_done(self, acct_id: str) -> bool:
+        res = self._get_request(f"{self._base_url}/accounts/{acct_id}")
+        attrib = res["data"]["attributes"]
+        bot_status = attrib.get("bot-status")
+        return bot_status is None

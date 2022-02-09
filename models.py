@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import List, Optional
 from deepdiff import DeepDiff, DeepHash
 
 
@@ -90,3 +90,43 @@ class CommunicationSettings:
         fields = vars(self)
         del fields["_obj"]
         return json.dumps(fields, indent=4)
+
+
+class Check:
+    def __init__(
+        self,
+        check_id: str,
+        rule_id: str,
+        region: str,
+        resource_name: str,
+        resource: str,
+        message: str,
+        suppressed: Optional[bool],
+        suppressed_until: Optional[int],
+    ) -> None:
+        self.check_id = check_id
+        self.rule_id = rule_id
+        self.region = region
+        self.resource_name = resource_name
+        self.resource = resource
+        self.message = message
+        self.suppressed = suppressed
+        self.suppressed_until = suppressed_until
+
+    def __hash__(self) -> int:
+        return hash(f"{self.rule_id}|{self.resource_name}|{self.resource}")
+
+    def __eq__(self, __o: object) -> bool:
+        if self.__class__ != __o.__class__:
+            return False
+        other: Check = __o
+
+        return (
+            self.rule_id == other.rule_id
+            and self.region == other.region
+            and self.resource_name == other.resource_name
+            and self.resource == other.resource
+        )
+
+    def __str__(self) -> str:
+        return json.dumps(vars(self), indent=4)
