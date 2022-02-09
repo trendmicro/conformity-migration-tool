@@ -392,7 +392,7 @@ def copy_suppressed_checks(
             show_instructions_for_missing_check(legacy_check)
             continue
         c1_svc.suppress_check(
-            check_id=c1_check.check_id, suppressed_until=c1_check.suppressed_until
+            check_id=c1_check.check_id, suppressed_until=legacy_check.suppressed_until
         )
     if not total_checks:
         print("    --> No suppressed check found.")
