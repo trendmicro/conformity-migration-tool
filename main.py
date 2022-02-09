@@ -198,7 +198,7 @@ def add_managed_groups(legacy_svc: ConformityService, c1_svc: ConformityService)
             directory_name = mg.name
             directory_id = azure_conf["directoryId"]
             app_client_id = azure_conf["applicationId"]
-            app_client_key = promp_azure_app_client_id(
+            app_client_key = prompt_azure_app_client_id(
                 directory_name, directory_id, app_client_id
             )
             c1_svc.create_azure_directory(
@@ -209,7 +209,7 @@ def add_managed_groups(legacy_svc: ConformityService, c1_svc: ConformityService)
             )
 
 
-def promp_azure_app_client_id(directory_name, directory_id, app_client_id) -> str:
+def prompt_azure_app_client_id(directory_name, directory_id, app_client_id) -> str:
     print(
         f"""
 Please enter the App registration key for the following Active Directory:
