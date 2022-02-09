@@ -43,7 +43,9 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 - [X] Account tags
 - [X] Conformity Bot settings
 - [X] Account Rule settings
+  - **API Limitation:** Notes cannot be copied to rules yet.
 - [X] Communication channel settings
 - [ ] Profiles
 - [ ] Report Configs
-- [ ] Checks
+- [X] Checks
+  - **API Limitation:** Notes cannot be ccopied to checks yet.
