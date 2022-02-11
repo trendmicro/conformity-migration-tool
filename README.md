@@ -39,13 +39,13 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
   - **Note**: The tool will display other users that needs to be invited by the admin to CloudOne Conformity.
 - [X] Groups
 - [X] Communication channel settings
+- [ ] Profiles
+- [ ] Report Configs
 ### Account-Level Configurations
 - [X] Account tags
 - [X] Conformity Bot settings
 - [X] Account Rule settings
-  - **API Limitation:** Notes cannot be copied to rules yet.
+  - **Limitation:** The API only allows writing a single note to the rule so the tool won't be able to preserve the history of notes. The tool will instead combine history of notes into a single note before writing it.
 - [X] Communication channel settings
-- [ ] Profiles
-- [ ] Report Configs
 - [X] Checks
-  - **API Limitation:** Notes cannot be copied to checks yet.
+  - **Limitation:** The API only allows writing a single note to the check so the tool won't be able to preserve the history of notes. In addition to that, API only allows a maximum of 200 characters of note. The tool will only get the most recent note and truncate it to 200 characters before writing it.
