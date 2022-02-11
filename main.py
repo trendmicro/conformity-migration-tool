@@ -393,6 +393,20 @@ def copy_account_rules_settings(
         )
 
 
+def truncate_txt_to_length(txt: str, length=-1, truncated_suffix="") -> str:
+    if length == -1 or (0 <= len(txt) <= length):
+        return txt
+
+    return txt[: length - len(truncated_suffix)] + truncated_suffix
+
+
+def get_most_recent_note_msg(notes: List[Note]) -> str:
+    if not notes:
+        return ""
+    note = sorted(notes, key=lambda note: note.created_ts, reverse=True)[0]
+    return note.note
+
+
 def create_new_note_from_history_of_notes(
     notes: List[Note], user_map: Dict[str, User]
 ) -> str:
@@ -458,8 +472,20 @@ def copy_suppressed_checks(
         if c1_check is None:
             show_instructions_for_missing_check(legacy_check)
             continue
+        legacy_check_detail = legacy_svc.get_check_detail(
+            check_id=legacy_check.check_id, with_notes=True
+        )
+        note_msg = get_most_recent_note_msg(legacy_check_detail.notes)
+        if not note_msg:
+            note_msg = "[Migration tool: No note found from the source Check]"
+        note_msg = truncate_txt_to_length(
+            txt=note_msg, length=200, truncated_suffix=".."
+        )
+        # print(f"Note: {note_msg}")
         c1_svc.suppress_check(
-            check_id=c1_check.check_id, suppressed_until=legacy_check.suppressed_until
+            check_id=c1_check.check_id,
+            suppressed_until=legacy_check.suppressed_until,
+            note=note_msg,
         )
 
 
