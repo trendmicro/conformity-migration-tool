@@ -467,6 +467,43 @@ class ConformityService:
         )
         return res["data"]
 
+    def get_check_detail(
+        self, check_id: str, with_notes=False, notes_limit=100
+    ) -> Check:
+        notes_limit = notes_limit if (0 < notes_limit < 100) else 100
+        params = {"filter[notes]": "true" if with_notes else "false"}
+        if with_notes:
+            params["filter[notesLength]"] = notes_limit
+        res = self._get_request(
+            f"{self._base_url}/checks/{quote(check_id, safe='')}", params=params
+        )
+        c = res["data"]
+        # print(json.dumps(c, indent=4))
+        attrib: dict = c["attributes"]
+        region = attrib["region"]
+        resource_name = attrib.get("resourceName", "")
+        resource = attrib.get("resource", "")
+        ns = attrib.get("notes", [])
+        notes = [
+            Note(
+                note=n["note"],
+                created_by=n["createdBy"],
+                created_ts=n["created-date"],
+            )
+            for n in ns
+        ]
+        return Check(
+            check_id=check_id,
+            rule_id=c["relationships"]["rule"]["data"]["id"],
+            region=region,
+            resource_name=resource_name,
+            resource=resource,
+            message=attrib["message"],
+            suppressed=attrib.get("suppressed"),
+            suppressed_until=attrib.get("suppressed-until"),
+            notes=notes,
+        )
+
     def is_bot_scan_done(self, acct_id: str) -> bool:
         res = self._get_request(f"{self._base_url}/accounts/{acct_id}")
         attrib = res["data"]["attributes"]

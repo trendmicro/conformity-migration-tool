@@ -92,6 +92,16 @@ class CommunicationSettings:
         return json.dumps(fields, indent=4)
 
 
+class Note:
+    def __init__(self, note: str, created_by: str, created_ts: int) -> None:
+        self.note = note
+        self.created_by = created_by
+        self.created_ts = created_ts
+
+    def __str__(self) -> str:
+        return json.dumps(vars(self), indent=4)
+
+
 class Check:
     def __init__(
         self,
@@ -103,6 +113,7 @@ class Check:
         message: str,
         suppressed: Optional[bool],
         suppressed_until: Optional[int],
+        notes: List[Note] = None,
     ) -> None:
         self.check_id = check_id
         self.rule_id = rule_id
@@ -112,6 +123,7 @@ class Check:
         self.message = message
         self.suppressed = suppressed
         self.suppressed_until = suppressed_until
+        self.notes = notes if notes is not None else []
 
     def __hash__(self) -> int:
         return hash(f"{self.rule_id}|{self.resource_name}|{self.resource}")
@@ -132,20 +144,10 @@ class Check:
         return json.dumps(vars(self), indent=4)
 
 
-class Note:
-    def __init__(self, note: str, created_by: str, created_ts: int) -> None:
-        self.note = note
-        self.created_by = created_by
-        self.created_ts = created_ts
-
-    def __str__(self) -> str:
-        return json.dumps(vars(self), indent=4)
-
-
 class Rule:
-    def __init__(self, setting: dict, notes: List[Note]) -> None:
+    def __init__(self, setting: dict, notes: List[Note] = None) -> None:
         self.setting = setting
-        self.notes = notes
+        self.notes = notes if notes is not None else []
         self.rule_id = setting["id"]
         self.enabled = setting["enabled"]
         self.configured = setting.get("configured", False)
