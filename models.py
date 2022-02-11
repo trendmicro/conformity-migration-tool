@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional
+from typing import List, Optional, Union
 from deepdiff import DeepDiff, DeepHash
 
 
@@ -130,3 +130,31 @@ class Check:
 
     def __str__(self) -> str:
         return json.dumps(vars(self), indent=4)
+
+
+class Note:
+    def __init__(self, note: str, created_by: str, created_ts: int) -> None:
+        self.note = note
+        self.created_by = created_by
+        self.created_ts = created_ts
+
+    def __str__(self) -> str:
+        return json.dumps(vars(self), indent=4)
+
+
+class Rule:
+    def __init__(self, setting: dict, notes: List[Note]) -> None:
+        self.setting = setting
+        self.notes = notes
+        self.rule_id = setting["id"]
+        self.enabled = setting["enabled"]
+        self.configured = setting.get("configured", False)
+
+    def __hash__(self) -> int:
+        return hash(self.rule_id)
+
+    def __eq__(self, __o: object) -> bool:
+        if self.__class__ != __o.__class__:
+            return False
+        other: Rule = __o
+        return self.rule_id == other.rule_id
