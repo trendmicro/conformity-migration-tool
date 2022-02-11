@@ -3,7 +3,7 @@ from typing import List, Iterable, Optional, Dict, Any
 import json
 
 import requests
-from models import User, Group, CommunicationSettings, Check
+from models import User, Group, CommunicationSettings, Check, Rule, Note
 
 
 class ConformityService:
@@ -170,6 +170,42 @@ class ConformityService:
             },
         )
         return res
+
+    def get_account_rule_setting(
+        self, acct_id: str, rule_id: str, with_notes=False
+    ) -> Rule:
+        res = self._get_request(
+            f"{self._base_url}/accounts/{acct_id}/settings/rules/{rule_id}",
+            params={"notes": "true" if with_notes else "false"},
+        )
+        # print(json.dumps(res, indent=4))
+        setting = res["data"]["attributes"]["settings"]["rules"][0]
+        notes: List[Note] = []
+        if with_notes:
+            meta = res["meta"]
+            ns = meta.get("notes")
+            if ns is None:
+                ns = meta["deprecation"]["notes"]
+            notes = [
+                Note(
+                    note=n["note"],
+                    created_by=n["createdBy"],
+                    created_ts=n["createdDate"],
+                )
+                for n in ns
+            ]
+        return Rule(setting=setting, notes=notes)
+
+    def update_account_rule_setting(
+        self, acct_id: str, rule_id: str, setting: dict, note: str = "Copied from API"
+    ):
+        res = self._patch_request(
+            url=f"{self._base_url}/accounts/{acct_id}/settings/rules/{rule_id}",
+            data={
+                "data": {"attributes": {"ruleSetting": setting, "note": note}},
+            },
+        )
+        return res["data"]
 
     def get_group_details(self, group_id: str) -> dict:
         res = self._get_request(f"{self._base_url}/groups/{group_id}")

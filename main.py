@@ -1,13 +1,14 @@
 import os
 import time
 import json
+from datetime import datetime, timezone
 from typing import Dict, List, Set, Iterable
 import yaml
 
 from PyInquirer import prompt
 from service import ConformityService
 from cloud_accounts import get_cloud_account_adder
-from models import Check, Group, User, CommunicationSettings
+from models import Check, Group, User, CommunicationSettings, Note
 
 
 def get_conf() -> dict:
@@ -323,14 +324,16 @@ def migrate_account_configurations(
     # print(resp)
     print(" - Done")
 
-    print("  --> Copying account rules settings", end="", flush=True)
-    # rules = legacy_svc.get_account_rules_settings(acct_id=legacy_acct_id)
-    rules = legacy_acct_attrib["settings"]["rules"]
-    # print(json.dumps(rules, indent=4))
-    if rules:
-        resp = c1_svc.update_account_rule_settings(acct_id=c1_acct_id, settings=rules)
-        # print(resp)
-    print(" - Done")
+    print("  --> Copying account rules settings:", flush=True)
+    copy_account_rules_settings(
+        legacy_svc=legacy_svc,
+        c1_svc=c1_svc,
+        legacy_acct_id=legacy_acct_id,
+        c1_acct_id=c1_acct_id,
+        legacy_acct_details=legacy_acct_details,
+        legacy_users=legacy_users,
+    )
+    # print(" - Done")
 
     print("  --> Copying communication channel settings", end="", flush=True)
     copy_communication_channel_settings(
@@ -358,6 +361,64 @@ def migrate_account_configurations(
         )
     else:
         print("  --> No suppressed check found to migrate")
+
+
+def copy_account_rules_settings(
+    legacy_svc: ConformityService,
+    c1_svc: ConformityService,
+    legacy_acct_id: str,
+    c1_acct_id: str,
+    legacy_acct_details: dict,
+    legacy_users: List[User],
+):
+
+    user_map = {user.user_id: user for user in legacy_users}
+    legacy_acct_attrib = legacy_acct_details["attributes"]
+    rule_ids = [r["id"] for r in legacy_acct_attrib["settings"].get("rules", [])]
+    for rule_id in rule_ids:
+        print(f"    --> Rule: {rule_id}", flush=True)
+        rule = legacy_svc.get_account_rule_setting(
+            acct_id=legacy_acct_id, rule_id=rule_id, with_notes=True
+        )
+
+        note_msg = create_new_note_from_history_of_notes(
+            notes=rule.notes, user_map=user_map
+        )
+
+        c1_svc.update_account_rule_setting(
+            acct_id=c1_acct_id,
+            rule_id=rule_id,
+            setting=rule.setting,
+            note=note_msg,
+        )
+
+
+def create_new_note_from_history_of_notes(
+    notes: List[Note], user_map: Dict[str, User]
+) -> str:
+    note_msg = "[Copied settings via migration tool]"
+    if not notes:
+        return f"{note_msg} No history of notes found."
+
+    note_frags = []
+    sorted_notes = sorted(notes, key=lambda note: note.created_ts, reverse=True)
+    for note in sorted_notes:
+        user = user_map.get(note.created_by)
+        user_name = f"{user.first_name} {user.last_name}" if user else ""
+        ts = int(note.created_ts / 1000)
+        dt_str = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(sep=" ")
+        note_frag = f"On: {dt_str}\nBy: {user_name}\nNote: {note.note}"
+        note_frags.append(note_frag)
+
+    note_history = "\n\n".join(note_frags)
+
+    note_msg = f"""{note_msg} History of notes:
+-----------------------
+{note_history}
+-----------------------
+"""
+
+    return note_msg
 
 
 def wait_for_bot_scan_to_finish(c1_svc: ConformityService, acct_id: str):
