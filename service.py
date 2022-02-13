@@ -3,7 +3,7 @@ from typing import List, Iterable, Optional, Dict, Any
 import json
 
 import requests
-from models import User, Group, CommunicationSettings, Check, Rule, Note
+from models import User, Group, CommunicationSettings, Check, Rule, Note, Profile
 
 
 class ConformityService:
@@ -33,11 +33,14 @@ class ConformityService:
     def _post_request(self, url, data):
         return self._exec_request("POST", url, data)
 
+    def _delete_request(self, url):
+        return self._exec_request("DELETE", url)
+
     def _patch_request(self, url, data):
         return self._exec_request("PATCH", url, data)
 
-    def _exec_request(self, method, url, data):
-        json_data = json.dumps(data, indent=4)
+    def _exec_request(self, method, url, data=None):
+        json_data = json.dumps(data, indent=4) if data else None
         resp = requests.request(
             method=method,
             url=url,
@@ -509,3 +512,50 @@ class ConformityService:
         attrib = res["data"]["attributes"]
         bot_status = attrib.get("bot-status")
         return bot_status is None
+
+    def get_custom_profiles(self) -> List[Profile]:
+        res = self._get_request(f"{self._base_url}/profiles")
+        profiles: List[Profile] = []
+        for prof_data in res["data"]:
+            settings = {"data": prof_data}
+            profiles.append(Profile(settings=settings))
+        return profiles
+
+    def get_profile(self, profile_id: str, include_rule_settings=False) -> Profile:
+        params = {"includes": "ruleSettings"} if include_rule_settings else None
+        res = self._get_request(
+            f"{self._base_url}/profiles/{profile_id}", params=params
+        )
+        return Profile(settings=res)
+
+    def _get_org_profile_id(self) -> str:
+        return f"organisation-{self.get_organisation_id()}"
+
+    def get_organisation_profile(self, include_rule_settings=False) -> Profile:
+        return self.get_profile(
+            profile_id=self._get_org_profile_id(),
+            include_rule_settings=include_rule_settings,
+        )
+
+    def update_organisation_profile(self, profile: Profile) -> Profile:
+        profile.delete_meta()
+        profile.delete_profile_id()
+        profile_id = self._get_org_profile_id()
+        profile.profile_id = profile_id
+        res = self._patch_request(
+            url=f"{self._base_url}/profiles/{profile_id}", data=profile.settings
+        )
+        return Profile(settings=res)
+
+    def create_new_profile(self, profile: Profile) -> Profile:
+        profile.delete_meta()
+        profile.delete_profile_id()
+        res = self._post_request(
+            url=f"{self._base_url}/profiles", data=profile.settings
+        )
+        return Profile(settings=res)
+
+    def delete_profile(self, profile_id: str):
+        res = self._delete_request(f"{self._base_url}/profiles/{profile_id}")
+        # print(res)
+        return res

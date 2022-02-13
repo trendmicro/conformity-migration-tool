@@ -160,3 +160,58 @@ class Rule:
             return False
         other: Rule = __o
         return self.rule_id == other.rule_id
+
+
+class Profile:
+    def __init__(self, settings: dict) -> None:
+        self.settings = settings
+        # data = settings["data"]
+        # attrib = data["attributes"]
+        # self.profile_id = data.get("id", "")
+        # self.name = attrib["name"]
+        # self.description = attrib.get("description", "")
+
+    @property
+    def profile_id(self) -> str:
+        return self.settings["data"].get("id", "")
+
+    @profile_id.setter
+    def profile_id(self, profile_id: str) -> None:
+        self.settings["data"]["id"] = profile_id
+
+    @property
+    def name(self) -> str:
+        return self.settings["data"]["attributes"]["name"]
+
+    @name.setter
+    def name(self, name: str) -> None:
+        self.settings["data"]["attributes"]["name"] = name
+
+    @property
+    def description(self) -> str:
+        return self.settings["data"]["attributes"].get("description", "")
+
+    @description.setter
+    def description(self, description: str) -> None:
+        self.settings["data"]["attributes"]["description"] = description
+
+    @property
+    def included_rules(self) -> Union[List[dict], None]:
+        return self.settings.get("included")
+
+    def delete_profile_id(self) -> None:
+        if "id" in self.settings["data"]:
+            del self.settings["data"]["id"]
+
+    def delete_meta(self) -> None:
+        if "meta" in self.settings:
+            del self.settings["meta"]
+
+    def __hash__(self) -> int:
+        return hash(self.name)
+
+    def __eq__(self, __o: object) -> bool:
+        if self.__class__ != __o.__class__:
+            return False
+        other: Profile = __o
+        return self.name == other.name

@@ -93,6 +93,8 @@ def main():
 
     create_user_defined_groups(legacy_svc, c1_svc)
 
+    update_organisation_profile(legacy_svc, c1_svc)
+
     c1_org_id = c1_svc.get_organisation_id()
 
     print(
@@ -141,7 +143,8 @@ def main():
             print("Account already exists in CloudOne Conformity!")
             if not (
                 ask_confirmation(
-                    "Continue migrating configurations (will overwrite existing ones)?"
+                    "Continue migrating configurations (will overwrite existing ones)?",
+                    ask_if_sure=True,
                 )
             ):
                 continue
@@ -156,6 +159,55 @@ def main():
             c1_org_id=c1_org_id,
         )
         print()
+
+    copy_custom_profiles(legacy_svc, c1_svc)
+
+
+def update_organisation_profile(
+    legacy_svc: ConformityService, c1_svc: ConformityService
+):
+    print("Copying Organisation Profile", flush=True)
+    legacy_org_profile = legacy_svc.get_organisation_profile(include_rule_settings=True)
+    c1_org_profile = c1_svc.get_organisation_profile(include_rule_settings=True)
+
+    if c1_org_profile.included_rules:
+        overwrite = ask_confirmation(
+            "CloudOne Organisation Profile has configured rules in it. Do you want to overwrite it?",
+            ask_if_sure=True,
+        )
+        if not overwrite:
+            return
+
+    c1_svc.update_organisation_profile(profile=legacy_org_profile)
+    # print(" - Done")
+
+
+def copy_custom_profiles(legacy_svc: ConformityService, c1_svc: ConformityService):
+    print("Copying Custom Profiles", flush=True)
+    legacy_profiles = legacy_svc.get_custom_profiles()
+    c1_profiles = c1_svc.get_custom_profiles()
+
+    legacy_profiles_set = set(legacy_profiles)
+    c1_profiles_to_replace = [p for p in c1_profiles if p in legacy_profiles_set]
+    if c1_profiles_to_replace:
+        print("Found following custom profiles that will be replaced during migration:")
+        for c1_profile in c1_profiles_to_replace:
+            print(f"  - Profile: {c1_profile.name}")
+        cont = ask_confirmation("Continue migrating custom profiles?", ask_if_sure=True)
+        if not cont:
+            return
+
+    for profile in c1_profiles_to_replace:
+        # print(f" --> Deleting CloudOne profile: {profile.name}")
+        c1_svc.delete_profile(profile_id=profile.profile_id)
+
+    for profile in legacy_profiles:
+        print(f"  --> Profile: {profile.name}", end="", flush=True)
+        profile_with_rules = legacy_svc.get_profile(
+            profile_id=profile.profile_id, include_rule_settings=True
+        )
+        c1_svc.create_new_profile(profile=profile_with_rules)
+        print(" - Done")
 
 
 def create_user_defined_groups(
@@ -525,7 +577,7 @@ then it is important to add them now before we proceed with migration:
     ask_when_user_invite_done()
 
 
-def ask_confirmation(msg: str, default=False) -> bool:
+def ask_confirmation(msg: str, default=False, ask_if_sure=False) -> bool:
     questions = [
         {
             "type": "confirm",
@@ -534,8 +586,17 @@ def ask_confirmation(msg: str, default=False) -> bool:
             "default": default,
         },
     ]
-    answer = prompt(questions=questions)
-    return answer["continue"]
+    while True:
+        answer = prompt(questions=questions)
+        cont = answer["continue"]
+        if not ask_if_sure or not cont:
+            return cont
+
+        sure = ask_confirmation(
+            f"You chose {'Yes' if cont else 'No'}. Are you sure?", default=False
+        )
+        if sure:
+            return cont
 
 
 def ask_choices(msg: str, choices: List[str], default=1):
