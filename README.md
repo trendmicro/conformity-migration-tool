@@ -39,7 +39,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
   - **Note**: The tool will display other users that needs to be invited by the admin to CloudOne Conformity.
 - [X] Groups
 - [X] Communication channel settings
-- [ ] Profiles
+- [X] Profiles
 - [ ] Report Configs
 ### Account-Level Configurations
 - [X] Account tags
