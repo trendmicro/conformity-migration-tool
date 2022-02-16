@@ -99,6 +99,8 @@ def main():
         base_url=conf["CLOUD_ONE_CONFORMITY"]["API_BASE_URL"],
     )
 
+    update_organisation_profile(legacy_svc, c1_svc)
+
     add_managed_groups(legacy_svc, c1_svc)
 
     c1_accts = c1_svc.list_accounts()
@@ -152,8 +154,6 @@ def main():
     invite_missing_users(legacy_users, c1_users)
 
     create_user_defined_groups(legacy_svc, c1_svc)
-
-    update_organisation_profile(legacy_svc, c1_svc)
 
     copy_custom_profiles(legacy_svc, c1_svc)
 
