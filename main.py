@@ -8,7 +8,15 @@ import yaml
 from PyInquirer import prompt
 from service import ConformityService
 from cloud_accounts import get_cloud_account_adder
-from models import Check, Group, User, CommunicationSettings, Note
+from models import (
+    AccountDetails,
+    Check,
+    Group,
+    User,
+    CommunicationSettings,
+    Note,
+    Account,
+)
 
 
 def get_conf() -> dict:
@@ -66,6 +74,16 @@ def create_api_conf(api_conf_file: str):
         return yaml.dump(conf, fh)
 
 
+def cloud_type_accts_map(accts: List[Account]) -> Dict[str, List[Account]]:
+    accts_map: Dict[str, List[Account]] = dict()
+
+    for acct in accts:
+        cloud_type_accts = accts_map.setdefault(acct.cloud_type, [])
+        cloud_type_accts.append(acct)
+
+    return accts_map
+
+
 def main():
     api_conf_file = "api_config.yml"
     ensure_api_conf_ready(api_conf_file)
@@ -81,6 +99,50 @@ def main():
         base_url=conf["CLOUD_ONE_CONFORMITY"]["API_BASE_URL"],
     )
 
+    add_managed_groups(legacy_svc, c1_svc)
+
+    c1_accts = c1_svc.list_accounts()
+    legacy_accts = legacy_svc.list_accounts()
+
+    legacy_cloud_type_accts_map = cloud_type_accts_map(legacy_accts)
+    c1_cloud_type_accts_map = cloud_type_accts_map(c1_accts)
+
+    cloud_accts_to_migrate: Dict[str, Dict[str, str]] = dict()
+
+    for cloud_type, legacy_accts in legacy_cloud_type_accts_map.items():
+        acct_adder = get_cloud_account_adder(
+            cloud_type=cloud_type, legacy_svc=legacy_svc, c1_svc=c1_svc
+        )
+        if acct_adder is None:
+            print(f"Does not support {cloud_type.upper()} yet! Skipping it.")
+
+        print(f"Adding {cloud_type.upper()} accounts to CloudOne Conformity:")
+        c1_cloud_type_accounts = c1_cloud_type_accts_map.get(cloud_type, [])
+
+        accts_to_migrate: Dict[str, str] = dict()
+        cloud_accts_to_migrate[cloud_type] = accts_to_migrate
+        for acct in legacy_accts:
+            c1_acct_id: str = None
+            exists, c1_acct_id = acct_adder.account_exists(
+                c1_accts=c1_cloud_type_accounts, acct=acct
+            )
+            if exists:
+                print(
+                    f"Account {acct.name} ({acct.environment}) already exists in CloudOne Conformity!"
+                )
+                if not (
+                    ask_confirmation(
+                        "Do you want to migrate configurations for this account (will overwrite existing ones)?",
+                        ask_if_sure=True,
+                    )
+                ):
+                    continue
+            else:
+                print(f" --> Account: {acct.name} ({acct.environment}) ")
+                c1_acct_id = acct_adder.account_add(acct=acct)
+
+            accts_to_migrate[acct.account_id] = c1_acct_id
+
     print("Retrieving Legacy Conformity Users", flush=True)
     legacy_users = legacy_svc.get_all_users()
 
@@ -89,11 +151,11 @@ def main():
 
     invite_missing_users(legacy_users, c1_users)
 
-    add_managed_groups(legacy_svc, c1_svc)
-
     create_user_defined_groups(legacy_svc, c1_svc)
 
     update_organisation_profile(legacy_svc, c1_svc)
+
+    copy_custom_profiles(legacy_svc, c1_svc)
 
     c1_org_id = c1_svc.get_organisation_id()
 
@@ -113,54 +175,18 @@ def main():
     )
     print(" - Done")
 
-    c1_accts = c1_svc.list_accounts()
-    legacy_accts = legacy_svc.list_accounts()
-
-    for acct in legacy_accts:
-        attrib = acct["attributes"]
-        name = attrib["name"]
-        environment = attrib["environment"]
-        # tags = attrib["tags"]
-        legacy_acct_id = acct["id"]
-
-        cloud_type: str = attrib["cloud-type"]
-
-        acct_adder = get_cloud_account_adder(
-            cloud_type=cloud_type, legacy_svc=legacy_svc, c1_svc=c1_svc
-        )
-        if acct_adder is None:
-            print(f"Does not support {cloud_type.upper()} yet! Skipping it.")
-
-        print(f"Migrating {cloud_type.upper()} Account: {name} ({environment})")
-
-        c1_acct_id: str = None
-        exists, c1_acct_id = acct_adder.account_exists(c1_accts=c1_accts, acct=acct)
-        if not exists:
-            print("  --> Adding account to CloudOne Conformity")
-            c1_acct_id = acct_adder.account_add(acct=acct)
-
-        else:
-            print("Account already exists in CloudOne Conformity!")
-            if not (
-                ask_confirmation(
-                    "Continue migrating configurations (will overwrite existing ones)?",
-                    ask_if_sure=True,
-                )
-            ):
-                continue
-
-        migrate_account_configurations(
-            legacy_svc=legacy_svc,
-            c1_svc=c1_svc,
-            legacy_acct_id=legacy_acct_id,
-            c1_acct_id=c1_acct_id,
-            legacy_users=legacy_users,
-            c1_users=c1_users,
-            c1_org_id=c1_org_id,
-        )
-        print()
-
-    copy_custom_profiles(legacy_svc, c1_svc)
+    for cloud_type, acct_id_map in cloud_accts_to_migrate.items():
+        for legacy_acct_id, c1_acct_id in acct_id_map.items():
+            migrate_account_configurations(
+                legacy_svc=legacy_svc,
+                c1_svc=c1_svc,
+                legacy_acct_id=legacy_acct_id,
+                c1_acct_id=c1_acct_id,
+                legacy_users=legacy_users,
+                c1_users=c1_users,
+                c1_org_id=c1_org_id,
+            )
+            print()
 
 
 def update_organisation_profile(
@@ -355,25 +381,28 @@ def migrate_account_configurations(
 ):
 
     legacy_acct_details = legacy_svc.get_account_details(acct_id=legacy_acct_id)
-    # print(json.dumps(legacy_acct_details, indent=4))
-    legacy_acct_attrib = legacy_acct_details["attributes"]
+    name = legacy_acct_details.name
+    environment = legacy_acct_details.environment
+    cloud_type = legacy_acct_details.cloud_type
+    print(
+        f"Migrating account configurations for: {name} ({environment}) [{cloud_type.upper()}]:"
+    )
 
     print("  --> Updating account tags", end="", flush=True)
     c1_svc.update_account(
         acct_id=c1_acct_id,
-        name=legacy_acct_attrib["name"],
-        environment=legacy_acct_attrib["environment"],
-        tags=legacy_acct_attrib["tags"],
+        name=name,
+        environment=environment,
+        tags=legacy_acct_details.tags,
     )
     print(" - Done")
 
     print("  --> Copying account bot settings", end="", flush=True)
     # bot_settings = legacy_svc.get_account_bot_settings(acct_id=legacy_acct_id)
-    bot_settings = legacy_acct_attrib["settings"]["bot"]
+    bot_settings = legacy_acct_details.bot_settings
     del bot_settings["lastModifiedFrom"]
     del bot_settings["lastModifiedBy"]
-    resp = c1_svc.update_account_bot_settings(acct_id=c1_acct_id, settings=bot_settings)
-    # print(resp)
+    c1_svc.update_account_bot_settings(acct_id=c1_acct_id, settings=bot_settings)
     print(" - Done")
 
     print("  --> Copying account rules settings:", flush=True)
@@ -420,27 +449,29 @@ def copy_account_rules_settings(
     c1_svc: ConformityService,
     legacy_acct_id: str,
     c1_acct_id: str,
-    legacy_acct_details: dict,
+    legacy_acct_details: AccountDetails,
     legacy_users: List[User],
 ):
 
     user_map = {user.user_id: user for user in legacy_users}
-    legacy_acct_attrib = legacy_acct_details["attributes"]
-    rule_ids = [r["id"] for r in legacy_acct_attrib["settings"].get("rules", [])]
-    for rule_id in rule_ids:
-        print(f"    --> Rule: {rule_id}", flush=True)
-        rule = legacy_svc.get_account_rule_setting(
+    for rule in legacy_acct_details.rules:
+        rule_id = rule.rule_id
+        print(
+            f"    --> Rule: {rule_id} ({'enabled' if rule.enabled else 'disabled'})",
+            flush=True,
+        )
+        rule_with_notes = legacy_svc.get_account_rule_setting(
             acct_id=legacy_acct_id, rule_id=rule_id, with_notes=True
         )
 
         note_msg = create_new_note_from_history_of_notes(
-            notes=rule.notes, user_map=user_map
+            notes=rule_with_notes.notes, user_map=user_map
         )
 
         c1_svc.update_account_rule_setting(
             acct_id=c1_acct_id,
             rule_id=rule_id,
-            setting=rule.setting,
+            setting=rule_with_notes.setting,
             note=note_msg,
         )
 

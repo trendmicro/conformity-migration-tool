@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union, Dict
 from deepdiff import DeepDiff, DeepHash
 
 
@@ -215,3 +215,64 @@ class Profile:
             return False
         other: Profile = __o
         return self.name == other.name
+
+
+class Account:
+    def __init__(self, acct_data: Dict[str, Any]) -> None:
+        self.data = acct_data
+
+    @property
+    def attributes(self) -> Dict[str, Any]:
+        return self.data["attributes"]
+
+    @property
+    def account_id(self) -> str:
+        return self.data["id"]
+
+    @property
+    def name(self) -> str:
+        return self.attributes["name"]
+
+    @property
+    def environment(self) -> str:
+        return self.attributes["environment"]
+
+    @property
+    def cloud_type(self) -> str:
+        return self.attributes["cloud-type"]
+
+    @property
+    def tags(self) -> List[str]:
+        return self.attributes.get("tags", [])
+
+    @property
+    def managed_group_id(self) -> str:
+        return self.attributes["managed-group-id"]
+
+    @property
+    def security_package(self) -> bool:
+        return self.attributes["security-package"]
+
+    @property
+    def organisation_id(self) -> str:
+        return self.data["relationships"]["organisation"]["data"]["id"]
+
+
+class AccountDetails(Account):
+    def __init__(self, acct_data: Dict[str, Any]) -> None:
+        super().__init__(acct_data=acct_data)
+
+    @property
+    def rules(self) -> List[Rule]:
+        return [
+            Rule(setting=rule_setting)
+            for rule_setting in self.attributes["settings"].get("rules", [])
+        ]
+
+    @property
+    def bot_settings(self) -> Dict[str, Any]:
+        return self.attributes["settings"]["bot"]
+
+    @property
+    def bot_status(self) -> Union[str, None]:
+        return self.attributes.get("bot-status")
