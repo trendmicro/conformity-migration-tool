@@ -1,17 +1,19 @@
 from abc import ABCMeta, abstractmethod
-import json
 from typing import List, Union, Tuple
 from PyInquirer import prompt
+from models import Account
 from service import ConformityService
 
 
 class CloudAccountAdder(metaclass=ABCMeta):
     @abstractmethod
-    def account_exists(self, c1_accts: List[dict], acct: dict) -> Tuple[bool, str]:
+    def account_exists(
+        self, c1_accts: List[Account], acct: Account
+    ) -> Tuple[bool, str]:
         pass
 
     @abstractmethod
-    def account_add(self, acct: dict) -> str:
+    def account_add(self, acct: Account) -> str:
         pass
 
 
@@ -22,26 +24,27 @@ class AWSCloudAccountAdder(CloudAccountAdder):
         self.legacy_svc = legacy_svc
         self.c1_svc = c1_svc
 
-    def _account_uniq_attrib(self, acct: dict) -> str:
-        return acct["attributes"]["awsaccount-id"]
+    def _account_uniq_attrib(self, acct: Account) -> str:
+        return acct.attributes["awsaccount-id"]
 
-    def account_exists(self, c1_accts: List[dict], acct: dict) -> Tuple[bool, str]:
+    def account_exists(
+        self, c1_accts: List[Account], acct: Account
+    ) -> Tuple[bool, str]:
         for c1_acct in c1_accts:
-            if c1_acct["attributes"]["cloud-type"] != "aws":
+            if c1_acct.cloud_type != "aws":
                 continue
             if self._account_uniq_attrib(acct) == self._account_uniq_attrib(c1_acct):
-                return True, c1_acct["id"]
+                return True, c1_acct.account_id
         return False, ""
 
-    def account_add(self, acct: dict) -> str:
-        attrib = acct["attributes"]
-        name = attrib["name"]
-        environment = attrib["environment"]
-        legacy_acct_id = acct["id"]
+    def account_add(self, acct: Account) -> str:
+        name = acct.name
+        environment = acct.environment
+        legacy_acct_id = acct.account_id
 
         c1_external_id = self.c1_svc.get_organisation_external_id()
 
-        aws_acct_num = acct["attributes"]["awsaccount-id"]
+        aws_acct_num = acct.attributes["awsaccount-id"]
 
         access_conf = self.legacy_svc.get_account_access_configuration(
             acct_id=legacy_acct_id
@@ -90,27 +93,25 @@ class AzureCloudAccountAdder(CloudAccountAdder):
         self.legacy_svc = legacy_svc
         self.c1_svc = c1_svc
 
-    def _account_uniq_attrib(self, acct: dict) -> str:
-        # print(json.dumps(acct, indent=4))
-        return acct["attributes"]["cloud-data"]["azure"]["subscriptionId"]
+    def _account_uniq_attrib(self, acct: Account) -> str:
+        return acct.attributes["cloud-data"]["azure"]["subscriptionId"]
 
-    def account_exists(self, c1_accts: List[dict], acct: dict) -> Tuple[bool, str]:
+    def account_exists(
+        self, c1_accts: List[Account], acct: Account
+    ) -> Tuple[bool, str]:
         for c1_acct in c1_accts:
-            if c1_acct["attributes"]["cloud-type"] != "azure":
+            if c1_acct.cloud_type != "azure":
                 continue
             if self._account_uniq_attrib(acct) == self._account_uniq_attrib(c1_acct):
-                return True, c1_acct["id"]
+                return True, c1_acct.account_id
         return False, ""
 
-    def account_add(self, acct: dict) -> str:
+    def account_add(self, acct: Account) -> str:
+        name = acct.name
+        environment = acct.environment
 
-        attrib = acct["attributes"]
-        name = attrib["name"]
-        environment = attrib["environment"]
-        # legacy_acct_id = acct["id"]
-
-        azure_sub_id = attrib["cloud-data"]["azure"]["subscriptionId"]
-        group_id = attrib["managed-group-id"]
+        azure_sub_id = acct.attributes["cloud-data"]["azure"]["subscriptionId"]
+        group_id = acct.managed_group_id
 
         res = self.legacy_svc.get_group_details(group_id=group_id)
         gattrib = res["attributes"]

@@ -3,7 +3,17 @@ from typing import List, Iterable, Optional, Dict, Any
 import json
 
 import requests
-from models import User, Group, CommunicationSettings, Check, Rule, Note, Profile
+from models import (
+    AccountDetails,
+    User,
+    Group,
+    CommunicationSettings,
+    Check,
+    Rule,
+    Note,
+    Profile,
+    Account,
+)
 
 
 class ConformityService:
@@ -50,9 +60,9 @@ class ConformityService:
         resp.raise_for_status()
         return resp.json()
 
-    def list_accounts(self):
+    def list_accounts(self) -> List[Account]:
         res = self._get_request(f"{self._base_url}/accounts")
-        return res["data"]
+        return [Account(acct_data=acct_data) for acct_data in res["data"]]
 
     def get_organisation_external_id(self) -> str:
         if not self._organisation_external_id:
@@ -147,9 +157,9 @@ class ConformityService:
         )
         return res
 
-    def get_account_details(self, acct_id: str) -> dict:
+    def get_account_details(self, acct_id: str) -> AccountDetails:
         res = self._get_request(f"{self._base_url}/accounts/{acct_id}")
-        return res["data"]
+        return AccountDetails(acct_data=res["data"])
 
     def get_account_rules_settings(self, acct_id: str) -> list:
         try:
@@ -508,9 +518,7 @@ class ConformityService:
         )
 
     def is_bot_scan_done(self, acct_id: str) -> bool:
-        res = self._get_request(f"{self._base_url}/accounts/{acct_id}")
-        attrib = res["data"]["attributes"]
-        bot_status = attrib.get("bot-status")
+        bot_status = self.get_account_details(acct_id=acct_id).bot_status
         return bot_status is None
 
     def get_custom_profiles(self) -> List[Profile]:
