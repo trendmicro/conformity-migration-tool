@@ -31,15 +31,17 @@ class Group:
 
     def __init__(
         self,
+        group_id: str,
         name: str,
         tags: List[str] = None,
         group_type: str = None,
         cloud_type: str = None,
         cloud_data: dict = None,
     ) -> None:
+        self.group_id = group_id
         self.name = name
         self.tags = [] if tags is None else tags
-        self._tags = tuple() if tags is None else tuple(tags)
+        self._tags = tuple() if tags is None else tuple(sorted(tags))
         self.group_type = group_type
         self.cloud_type = cloud_type
         self.cloud_data = cloud_data
@@ -276,3 +278,53 @@ class AccountDetails(Account):
     @property
     def bot_status(self) -> Union[str, None]:
         return self.attributes.get("bot-status")
+
+
+class ReportConfig:
+    def __init__(self, data: Dict[str, Any]) -> None:
+        self.data = data
+
+    @property
+    def report_config_id(self) -> str:
+        return self.data["id"]
+
+    @property
+    def enabled(self) -> bool:
+        return self.data["attributes"]["enabled"]
+
+    @property
+    def configuration(self) -> Dict[str, Any]:
+        return self.data["attributes"]["configuration"]
+
+    @property
+    def title(self) -> str:
+        return self.configuration["title"]
+
+    @property
+    def description(self) -> str:
+        return self.configuration["description"]
+
+    @property
+    def scheduled(self) -> bool:
+        return self.configuration["scheduled"]
+
+    @property
+    def is_account_level(self) -> bool:
+        return self.data["attributes"]["is-account-level"]
+
+    @property
+    def is_group_level(self) -> bool:
+        return self.data["attributes"]["is-group-level"]
+
+    @property
+    def is_organisation_level(self) -> bool:
+        return self.data["attributes"]["is-organisation-level"]
+
+    def __hash__(self) -> int:
+        return hash(self.title)
+
+    def __eq__(self, __o: object) -> bool:
+        if self.__class__ != __o.__class__:
+            return False
+        other: ReportConfig = __o
+        return self.title == other.title

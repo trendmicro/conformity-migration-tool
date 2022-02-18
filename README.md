@@ -40,7 +40,11 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 - [X] Groups
 - [X] Communication channel settings
 - [X] Profiles
-- [ ] Report Configs
+- [X] Report Configs
+
+### Group-Level Configurations
+- [X] Report Configs
+
 ### Account-Level Configurations
 - [X] Account tags
 - [X] Conformity Bot settings
@@ -49,3 +53,4 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 - [X] Communication channel settings
 - [X] Checks
   - **Limitation:** The API only allows writing a single note to the check so the tool won't be able to preserve the history of notes. In addition to that, API only allows a maximum of 200 characters of note. The tool will only get the most recent note and truncate it to 200 characters before writing it.
+- [X] Report Configs
