@@ -13,6 +13,7 @@ from models import (
     Note,
     Profile,
     Account,
+    ReportConfig,
 )
 
 
@@ -235,6 +236,7 @@ class ConformityService:
             if include_group_types and group_type not in include_group_types:
                 continue
             group = Group(
+                group_id=g["id"],
                 name=gattrib["name"],
                 tags=gattrib.get("tags"),
                 group_type=group_type,
@@ -566,4 +568,45 @@ class ConformityService:
     def delete_profile(self, profile_id: str):
         res = self._delete_request(f"{self._base_url}/profiles/{profile_id}")
         # print(res)
+        return res
+
+    def _list_report_configs(self, params: dict = None) -> List[ReportConfig]:
+        res = self._get_request(url=f"{self._base_url}/report-configs", params=params)
+        return [ReportConfig(data=rdata) for rdata in res["data"]]
+
+    def list_organisation_report_configs(self) -> List[ReportConfig]:
+        return self._list_report_configs()
+
+    def list_group_report_configs(self, group_id: str) -> List[ReportConfig]:
+        return self._list_report_configs(params={"groupId": group_id})
+
+    def list_account_report_configs(self, acct_id: str) -> List[ReportConfig]:
+        return self._list_report_configs(params={"accountId": acct_id})
+
+    def _create_report_config(
+        self,
+        report_conf: Dict[str, Any],
+        acct_id: str = None,
+        group_id: str = None,
+    ) -> Dict[str, Any]:
+        data = {"data": {"attributes": {"configuration": report_conf}}}
+        if acct_id:
+            data["data"]["attributes"]["accountId"] = acct_id
+        elif group_id:
+            data["data"]["attributes"]["groupId"] = group_id
+
+        res = self._post_request(url=f"{self._base_url}/report-configs", data=data)
+        return res["data"]
+
+    def create_organisation_report_config(self, report_conf: Dict[str, Any]):
+        return self._create_report_config(report_conf=report_conf)
+
+    def create_group_report_config(self, report_conf: Dict[str, Any], group_id: str):
+        return self._create_report_config(report_conf=report_conf, group_id=group_id)
+
+    def create_account_report_config(self, report_conf: Dict[str, Any], acct_id: str):
+        return self._create_report_config(report_conf=report_conf, acct_id=acct_id)
+
+    def delete_report_config(self, report_conf_id: str):
+        res = self._delete_request(f"{self._base_url}/report-configs/{report_conf_id}")
         return res

@@ -12,6 +12,7 @@ from models import (
     AccountDetails,
     Check,
     Group,
+    ReportConfig,
     User,
     CommunicationSettings,
     Note,
@@ -157,6 +158,10 @@ def main():
 
     copy_custom_profiles(legacy_svc, c1_svc)
 
+    copy_organisation_report_configs(legacy_svc, c1_svc)
+
+    migrate_all_groups_configs(legacy_svc, c1_svc)
+
     c1_org_id = c1_svc.get_organisation_id()
 
     print(
@@ -187,6 +192,32 @@ def main():
                 c1_org_id=c1_org_id,
             )
             print()
+
+
+def migrate_all_groups_configs(
+    legacy_svc: ConformityService, c1_svc: ConformityService
+):
+    c1_group_id_map: Dict[Group, str] = {g: g.group_id for g in c1_svc.list_groups()}
+
+    for legacy_group in legacy_svc.list_groups():
+        print(
+            f"Migrating group configurations for Group={legacy_group.name}, Tags={legacy_group.tags}",
+            flush=True,
+        )
+        legacy_group_id = legacy_group.group_id
+        c1_group_id = c1_group_id_map.get(legacy_group)
+        if not c1_group_id:
+            print(
+                f"Can't find corresponding CloudOne group for: Group={legacy_group.name}, Tags={legacy_group.tags}. Cannot migrate it's configurations."
+            )
+            continue
+
+        copy_group_report_configs(
+            legacy_svc=legacy_svc,
+            c1_svc=c1_svc,
+            legacy_group_id=legacy_group_id,
+            c1_group_id=c1_group_id,
+        )
 
 
 def update_organisation_profile(
@@ -234,6 +265,118 @@ def copy_custom_profiles(legacy_svc: ConformityService, c1_svc: ConformityServic
         )
         c1_svc.create_new_profile(profile=profile_with_rules)
         print(" - Done")
+
+
+def check_existing_c1_report_configs(
+    c1_svc: ConformityService,
+    legacy_report_configs: List[ReportConfig],
+    c1_report_configs: List[ReportConfig],
+    rconf_type: str,
+) -> bool:
+    rconf_type = rconf_type.capitalize()
+
+    legacy_rconf_set = set(legacy_report_configs)
+    c1_rconf_to_replace = [r for r in c1_report_configs if r in legacy_rconf_set]
+    if c1_rconf_to_replace:
+        print(
+            f"Found following {rconf_type} Report Configs that will be replaced during migration:"
+        )
+        for c1_rconf in c1_rconf_to_replace:
+            print(f"  - Report Config: {c1_rconf.title}")
+        cont = ask_confirmation(
+            f"Continue migrating {rconf_type} Report Configs?", ask_if_sure=True
+        )
+        if not cont:
+            return False
+
+    for rconf in c1_rconf_to_replace:
+        print(f" --> Deleting CloudOne {rconf_type} Report Config: {rconf.title}")
+        c1_svc.delete_report_config(report_conf_id=rconf.report_config_id)
+
+    return True
+
+
+def copy_account_report_configs(
+    legacy_svc: ConformityService,
+    c1_svc: ConformityService,
+    legacy_acct_id: str,
+    c1_acct_id: str,
+):
+    rconf_type = "Account"
+    print(f"  --> Copying {rconf_type} Report Configs", flush=True)
+    legacy_report_configs = legacy_svc.list_account_report_configs(
+        acct_id=legacy_acct_id
+    )
+    c1_report_configs = c1_svc.list_account_report_configs(acct_id=c1_acct_id)
+
+    cont_migration = check_existing_c1_report_configs(
+        c1_svc=c1_svc,
+        legacy_report_configs=legacy_report_configs,
+        c1_report_configs=c1_report_configs,
+        rconf_type=rconf_type,
+    )
+    if not cont_migration:
+        return
+
+    for report_config in legacy_report_configs:
+        print(f"    --> Report Config: {report_config.title}")
+        c1_svc.create_account_report_config(
+            report_conf=report_config.configuration, acct_id=c1_acct_id
+        )
+
+
+def copy_group_report_configs(
+    legacy_svc: ConformityService,
+    c1_svc: ConformityService,
+    legacy_group_id: str,
+    c1_group_id: str,
+):
+    rconf_type = "Group"
+    print(f" --> Copying {rconf_type} Report Configs", flush=True)
+    legacy_report_configs = legacy_svc.list_group_report_configs(
+        group_id=legacy_group_id
+    )
+    c1_report_configs = c1_svc.list_group_report_configs(group_id=c1_group_id)
+
+    cont_migration = check_existing_c1_report_configs(
+        c1_svc=c1_svc,
+        legacy_report_configs=legacy_report_configs,
+        c1_report_configs=c1_report_configs,
+        rconf_type=rconf_type,
+    )
+    if not cont_migration:
+        return
+
+    for report_config in legacy_report_configs:
+        print(f"    --> Report Config: {report_config.title}")
+        c1_svc.create_group_report_config(
+            report_conf=report_config.configuration, group_id=c1_group_id
+        )
+
+
+def copy_organisation_report_configs(
+    legacy_svc: ConformityService,
+    c1_svc: ConformityService,
+):
+    rconf_type = "Organisation"
+    print(f"Copying {rconf_type} Report Configs", flush=True)
+    legacy_report_configs = legacy_svc.list_organisation_report_configs()
+    c1_report_configs = c1_svc.list_organisation_report_configs()
+
+    cont_migration = check_existing_c1_report_configs(
+        c1_svc=c1_svc,
+        legacy_report_configs=legacy_report_configs,
+        c1_report_configs=c1_report_configs,
+        rconf_type=rconf_type,
+    )
+    if not cont_migration:
+        return
+
+    for report_config in legacy_report_configs:
+        print(f"  --> Report Config: {report_config.title}")
+        c1_svc.create_organisation_report_config(
+            report_conf=report_config.configuration
+        )
 
 
 def create_user_defined_groups(
@@ -427,6 +570,13 @@ def migrate_account_configurations(
         c1_org_id=c1_org_id,
     )
     print(" - Done")
+
+    copy_account_report_configs(
+        legacy_svc=legacy_svc,
+        c1_svc=c1_svc,
+        legacy_acct_id=legacy_acct_id,
+        c1_acct_id=c1_acct_id,
+    )
 
     if has_suppressed_check(legacy_svc=legacy_svc, acct_id=legacy_acct_id):
         print("  --> Waiting for bot scan to finish ", end="", flush=True)
