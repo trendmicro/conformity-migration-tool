@@ -1,27 +1,29 @@
 import os
 import time
-import json
 from datetime import datetime, timezone
-from typing import Dict, List, Set, Iterable
-import yaml
+from typing import Any, Dict, Iterable, List, Set
 
+import yaml
 from PyInquirer import prompt
-from service import ConformityService
-from cloud_accounts import get_cloud_account_adder
-from models import (
+
+from conformity_migration.cloud_accounts import get_cloud_account_adder
+from conformity_migration.models import (
+    Account,
     AccountDetails,
     Check,
+    CommunicationSettings,
     Group,
+    Note,
     ReportConfig,
     User,
-    CommunicationSettings,
-    Note,
-    Account,
 )
+from conformity_migration.service import ConformityService
+
+script_dir = os.path.abspath(os.path.dirname(__file__))
 
 
-def get_conf() -> dict:
-    with open("config.yml", mode="r") as fh:
+def get_conf() -> Any:
+    with open(os.path.join(script_dir, "config.yml"), mode="r") as fh:
         return yaml.load(fh, Loader=yaml.SafeLoader)
 
 
@@ -118,6 +120,7 @@ def main():
         )
         if acct_adder is None:
             print(f"Does not support {cloud_type.upper()} yet! Skipping it.")
+            continue
 
         print(f"Adding {cloud_type.upper()} accounts to CloudOne Conformity:")
         c1_cloud_type_accounts = c1_cloud_type_accts_map.get(cloud_type, [])
@@ -125,7 +128,7 @@ def main():
         accts_to_migrate: Dict[str, str] = dict()
         cloud_accts_to_migrate[cloud_type] = accts_to_migrate
         for acct in legacy_accts:
-            c1_acct_id: str = None
+            c1_acct_id: str
             exists, c1_acct_id = acct_adder.account_exists(
                 c1_accts=c1_cloud_type_accounts, acct=acct
             )
@@ -172,15 +175,15 @@ def main():
     copy_communication_channel_settings(
         legacy_svc=legacy_svc,
         c1_svc=c1_svc,
-        legacy_acct_id=None,
-        c1_acct_id=None,
+        legacy_acct_id="",
+        c1_acct_id="",
         legacy_users=legacy_users,
         c1_users=c1_users,
         c1_org_id=c1_org_id,
     )
     print(" - Done")
 
-    for cloud_type, acct_id_map in cloud_accts_to_migrate.items():
+    for _, acct_id_map in cloud_accts_to_migrate.items():
         for legacy_acct_id, c1_acct_id in acct_id_map.items():
             migrate_account_configurations(
                 legacy_svc=legacy_svc,
@@ -290,7 +293,7 @@ def check_existing_c1_report_configs(
             return False
 
     for rconf in c1_rconf_to_replace:
-        print(f" --> Deleting CloudOne {rconf_type} Report Config: {rconf.title}")
+        # print(f" --> Deleting CloudOne {rconf_type} Report Config: {rconf.title}")
         c1_svc.delete_report_config(report_conf_id=rconf.report_config_id)
 
     return True
@@ -416,7 +419,7 @@ def add_managed_groups(legacy_svc: ConformityService, c1_svc: ConformityService)
             # print(f"Managed Group {mg.name} ({mg.cloud_type.upper()}) already exists!")
             continue
         if mg.cloud_type == "azure":
-            azure_conf = mg.cloud_data["azure"]
+            azure_conf = mg.cloud_data["azure"]  # type: ignore
             directory_name = mg.name
             directory_id = azure_conf["directoryId"]
             app_client_id = azure_conf["applicationId"]
@@ -444,29 +447,33 @@ If you lost the key, you may generate a new Client Secret on your Azure App Regi
     return ask_input("App registration key:", mask_input=True)
 
 
-def com_settings_legacy_to_candidate(
-    legacy_com_settings: CommunicationSettings,
+def _convert_com_settings_conf_from_legacy_to_c1(
+    legacy_conf: Dict[str, Any],
     legacy_user_id_email_map: Dict[str, str],
     c1_email_user_id_map: Dict[str, str],
-) -> CommunicationSettings:
-    legacy_conf = legacy_com_settings.configuration
-    if legacy_com_settings.channel in ("email", "sms"):
-        legacy_user_ids = legacy_conf["users"]
-        c1_user_ids = []
-        for legacy_user_id in legacy_user_ids:
-            email = legacy_user_id_email_map.get(legacy_user_id)
-            c1_user_id = c1_email_user_id_map.get(email)
-            c1_user_ids.append(c1_user_id)
-        c1_conf = {"users": c1_user_ids}
-    else:
-        c1_conf = legacy_conf
+) -> Dict[str, Any]:
+    legacy_user_ids = legacy_conf["users"]
+    c1_user_ids = []
+    for legacy_user_id in legacy_user_ids:
+        email = legacy_user_id_email_map.get(legacy_user_id)
+        if email is None:
+            print(
+                f"Cannot find email of Legacy Conformity user with an ID of: {legacy_user_id}. Excluding user from notification."
+            )
+            continue
 
-    return CommunicationSettings(
-        channel=legacy_com_settings.channel,
-        enabled=legacy_com_settings.enabled,
-        filter=legacy_com_settings.filter,
-        configuration=c1_conf,
-    )
+        c1_user_id = c1_email_user_id_map.get(email)
+        if c1_user_id is None:
+            print(
+                f"Cannot find corresponding user in CloudOne Conformity: {email}. Excluding user from notification."
+            )
+            continue
+
+        c1_user_ids.append(c1_user_id)
+
+    c1_conf = {"users": c1_user_ids}
+
+    return c1_conf
 
 
 def copy_communication_channel_settings(
@@ -486,13 +493,9 @@ def copy_communication_channel_settings(
     for s in legacy_com_settings:
         legacy_conf = s.configuration
         if s.channel in ("email", "sms"):
-            legacy_user_ids = legacy_conf["users"]
-            c1_user_ids = []
-            for legacy_user_id in legacy_user_ids:
-                email = legacy_user_id_email_map.get(legacy_user_id)
-                c1_user_id = c1_email_user_id_map.get(email)
-                c1_user_ids.append(c1_user_id)
-            c1_conf = {"users": c1_user_ids}
+            c1_conf = _convert_com_settings_conf_from_legacy_to_c1(
+                legacy_conf, legacy_user_id_email_map, c1_email_user_id_map
+            )
         else:
             c1_conf = legacy_conf
 
@@ -692,7 +695,7 @@ def copy_suppressed_checks(
             f"    --> {legacy_check.rule_id}|{legacy_check.region}|{legacy_check.resource_name}|{legacy_check.resource}",
             flush=True,
         )
-        filters = {
+        filters: Dict[str, Any] = {
             "ruleIds": [legacy_check.rule_id],
             "regions": [legacy_check.region],
         }
@@ -794,7 +797,7 @@ def ask_choices(msg: str, choices: List[str], default=1):
     return answer["choice"]
 
 
-def ask_when_user_invite_done():
+def ask_when_user_invite_done() -> None:
     while True:
         choice = ask_choices(
             msg="Please choose 'Done' when you'are done adding the users to CloudOne.",

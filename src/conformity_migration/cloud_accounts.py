@@ -1,8 +1,10 @@
 from abc import ABCMeta, abstractmethod
-from typing import List, Union, Tuple
+from typing import List, Tuple, Union
+
 from PyInquirer import prompt
-from models import Account
-from service import ConformityService
+
+from .models import Account
+from .service import ConformityService
 
 
 class CloudAccountAdder(metaclass=ABCMeta):
