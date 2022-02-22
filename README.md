@@ -11,7 +11,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 1) Download this tool's folder to any folder in your local machine.
 
 2) Go to the folder where the tool is located.
-   
+
 3) Create a python virtual environment
     ```
     python -m venv .venv
@@ -20,12 +20,12 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
     ```
     pip install -r requirements.txt
     ```
- 
+
 5) Run the tool
     ```
     python main.py
     ```
-   
+
 ## Migration support
 ### Cloud Types
 - [X] AWS account

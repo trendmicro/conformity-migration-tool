@@ -1,19 +1,20 @@
-from urllib.parse import quote
-from typing import List, Iterable, Optional, Dict, Any
 import json
+from typing import Any, Dict, Iterable, List, Optional
+from urllib.parse import quote
 
 import requests
-from models import (
+
+from .models import (
+    Account,
     AccountDetails,
-    User,
-    Group,
-    CommunicationSettings,
     Check,
-    Rule,
+    CommunicationSettings,
+    Group,
     Note,
     Profile,
-    Account,
     ReportConfig,
+    Rule,
+    User,
 )
 
 
@@ -25,7 +26,7 @@ class ConformityService:
             "Authorization": f"ApiKey {self._api_key}",
             "Content-Type": "application/vnd.api+json",
         }
-        self._organisation_external_id: str = None
+        self._organisation_external_id: str
 
     # def _raise_for_status(self, resp):
     #     try:
@@ -37,24 +38,23 @@ class ConformityService:
     #         raise e
 
     def _get_request(self, url, params=None):
-        resp = requests.get(url=url, headers=self._headers, params=params)
-        resp.raise_for_status()
-        return resp.json()
+        return self._exec_request("GET", url, params=params)
 
     def _post_request(self, url, data):
-        return self._exec_request("POST", url, data)
+        return self._exec_request("POST", url, data=data)
 
     def _delete_request(self, url):
         return self._exec_request("DELETE", url)
 
     def _patch_request(self, url, data):
-        return self._exec_request("PATCH", url, data)
+        return self._exec_request("PATCH", url, data=data)
 
-    def _exec_request(self, method, url, data=None):
+    def _exec_request(self, method, url, params=None, data=None):
         json_data = json.dumps(data, indent=4) if data else None
         resp = requests.request(
             method=method,
             url=url,
+            params=params,
             data=json_data,
             headers=self._headers,
         )
@@ -316,7 +316,7 @@ class ConformityService:
         if acct_id:
             params = {"accountId": acct_id}
         else:
-            params = {"includeParents": True}
+            params = {"includeParents": "true"}
         res = self._get_request(
             f"{self._base_url}/settings/communication", params=params
         )
@@ -335,7 +335,7 @@ class ConformityService:
         return settings
 
     def create_communication_settings(
-        self, com_settings: List[CommunicationSettings], acct_id: str, org_id: str
+        self, com_settings: Iterable[CommunicationSettings], acct_id: str, org_id: str
     ):
         # for cs in com_settings:
         #     print(cs)
@@ -589,7 +589,7 @@ class ConformityService:
         acct_id: str = None,
         group_id: str = None,
     ) -> Dict[str, Any]:
-        data = {"data": {"attributes": {"configuration": report_conf}}}
+        data: Dict[str, Any] = {"data": {"attributes": {"configuration": report_conf}}}
         if acct_id:
             data["data"]["attributes"]["accountId"] = acct_id
         elif group_id:

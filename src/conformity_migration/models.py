@@ -1,5 +1,6 @@
 import json
-from typing import Any, List, Optional, Union, Dict
+from typing import Any, Dict, List, Optional, Union
+
 from deepdiff import DeepDiff, DeepHash
 
 
@@ -16,11 +17,10 @@ class User:
     def __hash__(self) -> int:
         return hash(self.email)
 
-    def __eq__(self, __o: object) -> bool:
-        if self.__class__ != __o.__class__:
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, User):
             return False
-        other: User = __o
-
+        other: User = other
         return self.email == other.email
 
 
@@ -49,10 +49,10 @@ class Group:
     def __hash__(self) -> int:
         return hash(self.name)
 
-    def __eq__(self, __o: object) -> bool:
-        if self.__class__ != __o.__class__:
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Group):
             return False
-        other: Group = __o
+        other: Group = other
 
         return self.name == other.name and self._tags == other._tags
 
@@ -84,8 +84,8 @@ class CommunicationSettings:
         dh = DeepHash(self._obj)[self._obj]
         return hash(dh)
 
-    def __eq__(self, __o: object) -> bool:
-        diff = DeepDiff(self._obj, __o._obj, ignore_order=True)
+    def __eq__(self, other: Any) -> bool:
+        diff = DeepDiff(self._obj, other._obj, ignore_order=True)
         return len(diff) == 0
 
     def __str__(self) -> str:
@@ -130,10 +130,10 @@ class Check:
     def __hash__(self) -> int:
         return hash(f"{self.rule_id}|{self.resource_name}|{self.resource}")
 
-    def __eq__(self, __o: object) -> bool:
-        if self.__class__ != __o.__class__:
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Check):
             return False
-        other: Check = __o
+        other: Check = other
 
         return (
             self.rule_id == other.rule_id
@@ -157,10 +157,10 @@ class Rule:
     def __hash__(self) -> int:
         return hash(self.rule_id)
 
-    def __eq__(self, __o: object) -> bool:
-        if self.__class__ != __o.__class__:
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Rule):
             return False
-        other: Rule = __o
+        other: Rule = other
         return self.rule_id == other.rule_id
 
 
@@ -212,10 +212,10 @@ class Profile:
     def __hash__(self) -> int:
         return hash(self.name)
 
-    def __eq__(self, __o: object) -> bool:
-        if self.__class__ != __o.__class__:
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Profile):
             return False
-        other: Profile = __o
+        other: Profile = other
         return self.name == other.name
 
 
@@ -323,8 +323,8 @@ class ReportConfig:
     def __hash__(self) -> int:
         return hash(self.title)
 
-    def __eq__(self, __o: object) -> bool:
-        if self.__class__ != __o.__class__:
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, ReportConfig):
             return False
-        other: ReportConfig = __o
+        other: ReportConfig = other
         return self.title == other.title
