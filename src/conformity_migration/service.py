@@ -26,7 +26,7 @@ class ConformityService:
             "Authorization": f"ApiKey {self._api_key}",
             "Content-Type": "application/vnd.api+json",
         }
-        self._organisation_external_id: str
+        self._organisation_external_id = ""
 
     # def _raise_for_status(self, resp):
     #     try:
