@@ -17,7 +17,12 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
     python3 -m venv .venv
     ```
 
-4) Install the tool
+4) Activate the virtual environment
+   ```
+   source .venv/bin/activate
+   ```
+
+5) Install the tool
     ```
     pip install conformity-migration-tool
     ```
@@ -26,7 +31,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
     pip install conformity_migration_tool-<version>-py3-none-any.whl
     ```
 
-5) Run the tool
+6) Run the tool
     ```
     conformity-migration-tool
     ```
