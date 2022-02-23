@@ -19,7 +19,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 
 4) Install the tool
     ```
-    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ conformity-migration-tool
+    pip install conformity-migration-tool
     ```
     Alternatively, you can download the python distribution (.whl file) from this page's asset section: [conformity-migration-tool](https://github.com/ronald-bautista/conformity-migration-tool/releases/latest). Then you can run this command:
     ```
