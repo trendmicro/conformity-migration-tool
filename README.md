@@ -4,26 +4,31 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 ## Requirements
 1. Python v3.7+
 2. API Keys for both Legacy Conformity and CloudOne Conformity
-3. Both API Keys must have admin privileges
+   - **Note:** Both API Keys must have admin privileges
 
 ## How to use this tool
 
-1) Download this tool's folder to any folder in your local machine.
+1) Create or choose an empty folder where you would like to install and run the tool.
 
-2) Go to the folder where the tool is located.
+2) Start a shell/terminal on the folder you just created or chosen.
 
-3) Create a python virtual environment
+3) Create a python3 virtual environment (minimum: python v3.7)
     ```
-    python -m venv .venv
+    python3 -m venv .venv
     ```
-4) Install the dependencies
+
+4) Install the tool
     ```
-    pip install -r requirements.txt
+    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ conformity-migration-tool
+    ```
+    Alternatively, you can download the python distribution (.whl file) from this page's asset section: [conformity-migration-tool](https://github.com/ronald-bautista/conformity-migration-tool/releases/latest). Then you can run this command:
+    ```
+    pip install conformity_migration_tool-<version>-py3-none-any.whl
     ```
 
 5) Run the tool
     ```
-    python main.py
+    conformity-migration-tool
     ```
 
 ## Migration support
