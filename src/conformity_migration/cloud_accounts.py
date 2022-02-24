@@ -3,8 +3,8 @@ from typing import List, Tuple, Union
 
 from PyInquirer import prompt
 
+from .conformity_api import ConformityAPI
 from .models import Account
-from .service import ConformityService
 
 
 class CloudAccountAdder(metaclass=ABCMeta):
@@ -20,11 +20,9 @@ class CloudAccountAdder(metaclass=ABCMeta):
 
 
 class AWSCloudAccountAdder(CloudAccountAdder):
-    def __init__(
-        self, legacy_svc: ConformityService, c1_svc: ConformityService
-    ) -> None:
-        self.legacy_svc = legacy_svc
-        self.c1_svc = c1_svc
+    def __init__(self, legacy_api: ConformityAPI, c1_api: ConformityAPI) -> None:
+        self.legacy_api = legacy_api
+        self.c1_api = c1_api
 
     def _account_uniq_attrib(self, acct: Account) -> str:
         return acct.attributes["awsaccount-id"]
@@ -44,11 +42,11 @@ class AWSCloudAccountAdder(CloudAccountAdder):
         environment = acct.environment
         legacy_acct_id = acct.account_id
 
-        c1_external_id = self.c1_svc.get_organisation_external_id()
+        c1_external_id = self.c1_api.get_organisation_external_id()
 
         aws_acct_num = acct.attributes["awsaccount-id"]
 
-        access_conf = self.legacy_svc.get_account_access_configuration(
+        access_conf = self.legacy_api.get_account_access_configuration(
             acct_id=legacy_acct_id
         )
         role_arn = access_conf["roleArn"]
@@ -61,7 +59,7 @@ class AWSCloudAccountAdder(CloudAccountAdder):
         )
         prompt_continue()
 
-        res = self.c1_svc.add_aws_account(
+        res = self.c1_api.add_aws_account(
             name=name,
             environment=environment,
             role_arn=role_arn,
@@ -89,11 +87,9 @@ Please do the following steps to grant CloudOne Conformity access to your AWS ac
 
 
 class AzureCloudAccountAdder(CloudAccountAdder):
-    def __init__(
-        self, legacy_svc: ConformityService, c1_svc: ConformityService
-    ) -> None:
-        self.legacy_svc = legacy_svc
-        self.c1_svc = c1_svc
+    def __init__(self, legacy_api: ConformityAPI, c1_api: ConformityAPI) -> None:
+        self.legacy_api = legacy_api
+        self.c1_api = c1_api
 
     def _account_uniq_attrib(self, acct: Account) -> str:
         return acct.attributes["cloud-data"]["azure"]["subscriptionId"]
@@ -115,12 +111,12 @@ class AzureCloudAccountAdder(CloudAccountAdder):
         azure_sub_id = acct.attributes["cloud-data"]["azure"]["subscriptionId"]
         group_id = acct.managed_group_id
 
-        res = self.legacy_svc.get_group_details(group_id=group_id)
+        res = self.legacy_api.get_group_details(group_id=group_id)
         gattrib = res["attributes"]
         azure_data = gattrib["cloud-data"]["azure"]
         active_directory_id = azure_data["directoryId"]
 
-        res = self.c1_svc.add_azure_subscription(
+        res = self.c1_api.add_azure_subscription(
             name=name,
             environment=environment,
             subscription_id=azure_sub_id,
@@ -144,10 +140,10 @@ def prompt_continue():
 
 
 def get_cloud_account_adder(
-    cloud_type: str, legacy_svc: ConformityService, c1_svc: ConformityService
+    cloud_type: str, legacy_api: ConformityAPI, c1_api: ConformityAPI
 ) -> Union[CloudAccountAdder, None]:
     if cloud_type == "aws":
-        return AWSCloudAccountAdder(legacy_svc, c1_svc)
+        return AWSCloudAccountAdder(legacy_api, c1_api)
     if cloud_type == "azure":
-        return AzureCloudAccountAdder(legacy_svc, c1_svc)
+        return AzureCloudAccountAdder(legacy_api, c1_api)
     return None

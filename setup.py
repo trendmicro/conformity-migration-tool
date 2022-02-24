@@ -1,6 +1,7 @@
 from setuptools import setup
 
 REQUIRES = [
+    "typing_extensions>=4.0.0",
     "requests>=2.0.0,<3.0.0",
     "PyYAML>=6.0,<7.0",
     "deepdiff>=5.7.0,<6.0.0",

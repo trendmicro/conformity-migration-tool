@@ -1,8 +1,10 @@
 import json
+from types import FunctionType
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote
 
 import requests
+from typing_extensions import Protocol
 
 from .models import (
     Account,
@@ -18,28 +20,210 @@ from .models import (
 )
 
 
-class ConformityService:
+class ConformityException(Exception):
+    def __init__(self, *args: object, details="") -> None:
+        super().__init__(*args)
+        self.details = details
+
+
+class UnauthorizedError(ConformityException):
+    pass
+
+
+class ResourceNotFoundError(ConformityException):
+    pass
+
+
+class ClientError(ConformityException):
+    pass
+
+
+class ServerInternalError(ConformityException):
+    pass
+
+
+class OtherError(ConformityException):
+    pass
+
+
+class ConformityAPI(Protocol):
+    def get_organisation_external_id(self) -> str:
+        pass
+
+    def get_account_access_configuration(self, acct_id: str) -> Dict[str, Any]:
+        pass
+
+    def add_aws_account(
+        self,
+        name: str,
+        environment: str,
+        role_arn: str,
+        external_id: str,
+        subscription_type="advanced",
+    ) -> Dict[str, Any]:
+        pass
+
+    def add_azure_subscription(
+        self,
+        name: str,
+        environment: str,
+        subscription_id: str,
+        active_directory_id: str,
+    ) -> Dict[str, Any]:
+        pass
+
+    def get_group_details(self, group_id: str) -> Dict[str, Any]:
+        pass
+
+    def get_organisation_id(self) -> str:
+        pass
+
+    def get_all_users(self) -> List[User]:
+        pass
+
+    def list_groups(self, include_group_types: List[str] = None) -> List[Group]:
+        pass
+
+    def list_accounts(self) -> List[Account]:
+        pass
+
+    def get_organisation_profile(self, include_rule_settings=False) -> Profile:
+        pass
+
+    def update_organisation_profile(self, profile: Profile) -> Profile:
+        pass
+
+    def get_custom_profiles(self) -> List[Profile]:
+        pass
+
+    def get_profile(self, profile_id: str, include_rule_settings=False) -> Profile:
+        pass
+
+    def create_new_profile(self, profile: Profile) -> Profile:
+        pass
+
+    def delete_profile(self, profile_id: str):
+        pass
+
+    def list_organisation_report_configs(self) -> List[ReportConfig]:
+        pass
+
+    def list_group_report_configs(self, group_id: str) -> List[ReportConfig]:
+        pass
+
+    def list_account_report_configs(self, acct_id: str) -> List[ReportConfig]:
+        pass
+
+    def create_organisation_report_config(self, report_conf: Dict[str, Any]):
+        pass
+
+    def create_group_report_config(self, report_conf: Dict[str, Any], group_id: str):
+        pass
+
+    def create_account_report_config(self, report_conf: Dict[str, Any], acct_id: str):
+        pass
+
+    def delete_report_config(self, report_conf_id: str):
+        pass
+
+    def create_group(self, name, tags=List[str]):
+        pass
+
+    def create_azure_directory(
+        self, name: str, directory_id: str, app_client_id: str, app_client_key: str
+    ):
+        pass
+
+    def get_communication_settings(self, acct_id: str) -> List[CommunicationSettings]:
+        pass
+
+    def create_communication_settings(
+        self, com_settings: Iterable[CommunicationSettings], acct_id: str, org_id: str
+    ):
+        pass
+
+    def get_account_details(self, acct_id: str) -> AccountDetails:
+        pass
+
+    def update_account(
+        self, acct_id: str, name: str, environment: str, tags: List[str]
+    ):
+        pass
+
+    def update_account_bot_settings(self, acct_id: str, settings: dict):
+        pass
+
+    def get_account_rule_setting(
+        self, acct_id: str, rule_id: str, with_notes=False
+    ) -> Rule:
+        pass
+
+    def update_account_rule_setting(
+        self, acct_id: str, rule_id: str, setting: dict, note: str = "Copied from API"
+    ):
+        pass
+
+    def is_bot_scan_done(self, acct_id: str) -> bool:
+        pass
+
+    def get_suppressed_checks(self, acct_id: str, limit=0) -> Iterable[Check]:
+        pass
+
+    def get_checks(
+        self, acct_id: str, filters: Optional[Dict[str, Any]] = None, limit=0
+    ) -> Iterable[Check]:
+        pass
+
+    def get_check_detail(
+        self, check_id: str, with_notes=False, notes_limit=100
+    ) -> Check:
+        pass
+
+    def suppress_check(
+        self, check_id: str, suppressed_until: Optional[int], note="Copied from API"
+    ):
+        pass
+
+
+class DefaultConformityAPI:
     def __init__(
-        self, api_key: str, base_url: str, http_content_type: str = None
+        self, api_key: str, base_url: str, http: requests.Session = None
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url.strip().rstrip("/")
-        if not http_content_type:
-            http_content_type = "application/vnd.api+json"
+        self.http = requests.Session() if http is None else http
         self._headers = {
             "Authorization": f"ApiKey {self._api_key}",
-            "Content-Type": http_content_type,
+            "Content-Type": "application/vnd.api+json",
         }
         self._organisation_external_id = ""
 
-    # def _raise_for_status(self, resp):
-    #     try:
-    #         resp.raise_for_status()
-    #     except BaseException as e:
-    #         print()
-    #         print(resp.text)
-    #         print()
-    #         raise e
+    def _err_details(self, resp: requests.Response) -> str:
+        req = resp.request
+        return f"""Request:
+{req.method} {req.url}
+Response:
+{resp.status_code} {resp.reason}
+{resp.text}"""
+
+    def _raise_for_status(self, resp: requests.Response):
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            err_resp: requests.Response = e.response
+            status_code = err_resp.status_code
+            details = self._err_details(resp=err_resp)
+            msg = str(e)
+            if status_code == 403:
+                raise UnauthorizedError(msg, details=details) from e
+            elif status_code == 404:
+                raise ResourceNotFoundError(msg, details=details) from e
+            elif 400 <= status_code < 500:
+                raise ClientError(msg, details=details)
+            elif 500 <= status_code < 600:
+                raise ServerInternalError(msg, details=details) from e
+            else:
+                raise OtherError(msg, details=details) from e
 
     def _get_request(self, url, params=None):
         return self._exec_request("GET", url, params=params)
@@ -55,14 +239,16 @@ class ConformityService:
 
     def _exec_request(self, method, url, params=None, data=None):
         json_data = json.dumps(data, indent=4) if data else None
-        resp = requests.request(
+        resp = self.http.request(
             method=method,
             url=url,
             params=params,
             data=json_data,
             headers=self._headers,
         )
-        resp.raise_for_status()
+        # resp.raise_for_status()
+        self._raise_for_status(resp)
+
         return resp.json()
 
     def list_accounts(self) -> List[Account]:
@@ -172,11 +358,11 @@ class ConformityService:
                 f"{self._base_url}/accounts/{acct_id}/settings/rules"
             )
             return res["data"]["attributes"]["settings"]["rules"]
-        except requests.exceptions.HTTPError as err:
-            resp: requests.Response = err.response
-            if resp.status_code == 404:
-                return []
-            raise err
+        except ResourceNotFoundError:
+            print("ResourceNotFoundError!!! So returning empty list instead :-)")
+            return []
+        except Exception as e:
+            raise e
 
     def update_account_rule_settings(
         self, acct_id: str, settings: dict, note: str = "Copied from API"
@@ -614,3 +800,115 @@ class ConformityService:
     def delete_report_config(self, report_conf_id: str):
         res = self._delete_request(f"{self._base_url}/report-configs/{report_conf_id}")
         return res
+
+
+class DefaultConformityAPIBaseDecorator(ConformityAPI):
+    def __init__(self, api: ConformityAPI) -> None:
+        self._api = api
+        self._methods = {
+            k for k, v in self.__class__.__dict__.items() if isinstance(v, FunctionType)
+        }
+
+    def __getattribute__(self, name: str) -> Any:
+        if name in {"__getattr__", "__class__", "_api", "_methods"}:
+            return super().__getattribute__(name)
+        if name in self._methods:
+            return super().__getattribute__(name)
+        return self.__getattr__(name)
+
+    def __getattr__(self, name):
+        return getattr(self._api, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "_api":
+            return super().__setattr__(name, value)
+        return setattr(self._api, name, value)
+
+
+class WorkaroundFixConformityAPI(DefaultConformityAPIBaseDecorator):
+    def __init__(self, api: ConformityAPI) -> None:
+        super().__init__(api)
+        self._already_tried_to_access_users = False
+        self._successfully_accessed_users = False
+
+    def get_all_users(self) -> List[User]:
+        try:
+            self._already_tried_to_access_users = True
+            users = self._api.get_all_users()
+            self._successfully_accessed_users = True
+            return users
+        except Exception as e:
+            self._successfully_accessed_users = True
+            raise e
+
+    def _confirmed_not_a_permission_error(self) -> bool:
+        print("Confirming if not a permission error.")
+        if not self._already_tried_to_access_users:
+            try:
+                print("Trying to access users..")
+                self.get_all_users()
+                return True
+            except Exception:
+                return False
+        return self._successfully_accessed_users
+
+    def _return_empty_obj_or_raise_error(self, empty_obj, e: Exception):
+        if self._confirmed_not_a_permission_error():
+            print("Not really a permission error")
+            return empty_obj
+        else:
+            print("It is indeed a permission error!")
+            raise e
+
+    def list_groups(self, include_group_types: List[str] = None) -> List[Group]:
+        try:
+            return self._api.list_groups(include_group_types=include_group_types)
+        except UnauthorizedError as e:
+            return self._return_empty_obj_or_raise_error([], e)
+
+    def get_custom_profiles(self) -> List[Profile]:
+        try:
+            return self._api.get_custom_profiles()
+        except UnauthorizedError as e:
+            return self._return_empty_obj_or_raise_error([], e)
+
+    def list_organisation_report_configs(self) -> List[ReportConfig]:
+        try:
+            return self._api.list_organisation_report_configs()
+        except UnauthorizedError as e:
+            return self._return_empty_obj_or_raise_error([], e)
+
+    def get_organisation_profile(self, include_rule_settings=False) -> Profile:
+        try:
+            return self._api.get_organisation_profile(
+                include_rule_settings=include_rule_settings
+            )
+        except UnauthorizedError as e:
+            org_id = self.get_organisation_id()
+            empty_profile = Profile(
+                settings={
+                    "meta": {},
+                    "data": {
+                        "type": "profiles",
+                        "id": f"organisation-{org_id}",
+                        "attributes": {
+                            "name": "Organisational Profile",
+                            "description": "Organisational Profile",
+                        },
+                        "relationships": {"ruleSettings": {"data": []}},
+                    },
+                }
+            )
+            return self._return_empty_obj_or_raise_error(empty_profile, e)
+
+    def list_accounts(self) -> List[Account]:
+        accts = self._api.list_accounts()
+        if accts is None:
+            accts = []
+        return accts
+
+    def get_communication_settings(self, acct_id: str) -> List[CommunicationSettings]:
+        com_settings = self._api.get_communication_settings(acct_id=acct_id)
+        if com_settings is None:
+            com_settings = []
+        return com_settings
