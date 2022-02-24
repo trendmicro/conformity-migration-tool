@@ -19,12 +19,16 @@ from .models import (
 
 
 class ConformityService:
-    def __init__(self, api_key: str, base_url: str) -> None:
+    def __init__(
+        self, api_key: str, base_url: str, http_content_type: str = None
+    ) -> None:
         self._api_key = api_key
         self._base_url = base_url.strip().rstrip("/")
+        if not http_content_type:
+            http_content_type = "application/vnd.api+json"
         self._headers = {
             "Authorization": f"ApiKey {self._api_key}",
-            "Content-Type": "application/vnd.api+json",
+            "Content-Type": http_content_type,
         }
         self._organisation_external_id = ""
 

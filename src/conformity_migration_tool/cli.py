@@ -100,6 +100,7 @@ def main():
     c1_svc = ConformityService(
         api_key=conf["CLOUD_ONE_CONFORMITY"]["API_KEY"],
         base_url=conf["CLOUD_ONE_CONFORMITY"]["API_BASE_URL"],
+        http_content_type=os.getenv("C1_HTTP_CONTENT_TYPE"),
     )
 
     update_organisation_profile(legacy_svc, c1_svc)
