@@ -1,6 +1,8 @@
 # conformity-migration-tool
 Migrates your visiblity information in cloudconformity.com to cloudone.trendmicro.com
 
+## **⚠ WARNING: This tool will overwrite your Cloud One Conformity**
+
 ## Requirements
 1. Python v3.7+
 2. API Keys for both Legacy Conformity and CloudOne Conformity
