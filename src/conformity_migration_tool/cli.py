@@ -104,6 +104,27 @@ def ask_user_to_run_configure():
     )
 
 
+def verify_conformity_api_credentials(api: ConformityAPI, conformity_type: str) -> User:
+    try:
+        user = api.get_all_users()[0]
+        return user
+    except ConformityException as e:
+        print(f"Invalid API URL or API Key for {conformity_type} Conformity")
+        raise e
+
+
+def verify_legacy_api_credentials(legacy_api: ConformityAPI):
+    user = verify_conformity_api_credentials(api=legacy_api, conformity_type="Legacy")
+    if user.user_id.startswith("urn:"):
+        raise Exception("Not a valid Legacy Conformity API URL")
+
+
+def verify_c1_api_credentials(c1_api: ConformityAPI):
+    user = verify_conformity_api_credentials(api=c1_api, conformity_type="Cloud One")
+    if not user.user_id.startswith("urn:"):
+        raise Exception("Not a valid Cloud One Conformity API URL")
+
+
 def run_migration(user_conf_path: Path):
     if not user_conf_path.exists():
         ask_user_to_run_configure()
@@ -114,8 +135,10 @@ def run_migration(user_conf_path: Path):
     deps = dependencies(conf)
 
     legacy_api = deps.legacy_conformity_api()
+    verify_legacy_api_credentials(legacy_api=legacy_api)
 
     c1_api = deps.c1_conformity_api()
+    verify_c1_api_credentials(c1_api=c1_api)
 
     update_organisation_profile(legacy_api, c1_api)
 
