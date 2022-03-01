@@ -1,8 +1,10 @@
-import os
+import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Set
 
+import click
 import yaml
 from PyInquirer import prompt
 
@@ -21,28 +23,35 @@ from conformity_migration.models import (
 
 from .di import dependencies
 
-script_dir = os.path.abspath(os.path.dirname(__file__))
+script_dirpath = Path(__file__).parent
+script_name = Path(sys.argv[0]).name
+
+USER_CONF_FILENAME = "user_config.yml"
+APP_CONF_FILENAME = "config.yml"
 
 
 def get_conf() -> Any:
-    with open(os.path.join(script_dir, "config.yml"), mode="r") as fh:
+    with open(script_dirpath.joinpath(APP_CONF_FILENAME), mode="r") as fh:
         return yaml.load(fh, Loader=yaml.SafeLoader)
 
 
 APP_CONF = get_conf()
 
 
-def get_api_conf(api_conf_file: str):
-    with open(api_conf_file, mode="r") as fh:
+def load_user_conf(user_conf_path: Path):
+    with open(user_conf_path, mode="r") as fh:
         return yaml.load(fh, Loader=yaml.SafeLoader)
 
 
-def ensure_api_conf_ready(api_conf_file: str):
-    if not os.path.exists(api_conf_file):
-        create_api_conf(api_conf_file)
+def create_user_config(user_conf_path: Path):
+    if user_conf_path.exists():
+        recreate_ok = ask_confirmation(
+            msg="Configuration file already exists. Do you want to recreate it?",
+            ask_if_sure=True,
+        )
+        if not recreate_ok:
+            return
 
-
-def create_api_conf(api_conf_file: str):
     region_map = APP_CONF["REGION_API_URL"]
     region_choices = [*region_map.keys(), "Other"]
     legacy_region = ask_choices(
@@ -75,7 +84,7 @@ def create_api_conf(api_conf_file: str):
             "API_BASE_URL": legacy_api_url,
         },
     }
-    with open(api_conf_file, mode="w") as fh:
+    with open(user_conf_path, mode="w") as fh:
         return yaml.dump(conf, fh)
 
 
@@ -89,10 +98,18 @@ def cloud_type_accts_map(accts: List[Account]) -> Dict[str, List[Account]]:
     return accts_map
 
 
-def run_migration():
-    api_conf_file = "api_config.yml"
-    ensure_api_conf_ready(api_conf_file)
-    conf = get_api_conf(api_conf_file)
+def ask_user_to_run_configure():
+    print(
+        f"Please configure migration tool by running this command: {script_name} configure"
+    )
+
+
+def run_migration(user_conf_path: Path):
+    if not user_conf_path.exists():
+        ask_user_to_run_configure()
+        return
+
+    conf = load_user_conf(user_conf_path)
 
     deps = dependencies(conf)
 
@@ -814,9 +831,22 @@ def pretty_print_com_settings(com_settings):
         print(s)
 
 
-def main():
+@click.group(
+    help="Migrates your visiblity information in cloudconformity.com to cloudone.trendmicro.com"
+)
+def cli():
+    pass
+
+
+@cli.command(help="Configures migration tool")
+def configure():
+    create_user_config(Path(USER_CONF_FILENAME))
+
+
+@cli.command(help="Runs migration")
+def run():
     try:
-        run_migration()
+        run_migration(Path(USER_CONF_FILENAME))
     except ConformityException as e:
         print(e)
         print(e.details)
@@ -824,4 +854,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    cli()

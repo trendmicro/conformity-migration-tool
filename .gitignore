@@ -129,4 +129,4 @@ dmypy.json
 .pyre/
 
 # prevents from being accidentally committed
-api_config.yml
+user_config.yml
