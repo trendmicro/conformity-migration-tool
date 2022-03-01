@@ -65,11 +65,13 @@ class Group:
 class CommunicationSettings:
     def __init__(
         self,
+        com_setting_id: str,
         channel: str,
         enabled: bool,
         filter: dict,
         configuration: dict,
     ) -> None:
+        self.com_setting_id = com_setting_id
         self.channel = channel
         self.enabled = enabled
         self.filter = filter

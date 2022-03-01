@@ -84,6 +84,9 @@ class ConformityAPI(Protocol):
     def list_groups(self, include_group_types: List[str] = None) -> List[Group]:
         pass
 
+    def delete_account(self, acct_id: str) -> dict:
+        pass
+
     def list_accounts(self) -> List[Account]:
         pass
 
@@ -91,6 +94,9 @@ class ConformityAPI(Protocol):
         pass
 
     def update_organisation_profile(self, profile: Profile) -> Profile:
+        pass
+
+    def reset_organisation_profile(self):
         pass
 
     def get_custom_profiles(self) -> List[Profile]:
@@ -126,12 +132,18 @@ class ConformityAPI(Protocol):
     def delete_report_config(self, report_conf_id: str):
         pass
 
+    def delete_group(self, group_id: str) -> dict:
+        pass
+
     def create_group(self, name, tags=List[str]):
         pass
 
     def create_azure_directory(
         self, name: str, directory_id: str, app_client_id: str, app_client_key: str
     ):
+        pass
+
+    def delete_communication_settings(self, com_setting_id: str) -> dict:
         pass
 
     def get_communication_settings(self, acct_id: str) -> List[CommunicationSettings]:
@@ -250,6 +262,10 @@ Response:
         self._raise_for_status(resp)
 
         return resp.json()
+
+    def delete_account(self, acct_id: str) -> dict:
+        res = self._delete_request(f"{self._base_url}/accounts/{acct_id}")
+        return res
 
     def list_accounts(self) -> List[Account]:
         res = self._get_request(f"{self._base_url}/accounts")
@@ -443,6 +459,10 @@ Response:
         )
         return res["data"]
 
+    def delete_group(self, group_id: str) -> dict:
+        res = self._delete_request(f"{self._base_url}/groups/{group_id}")
+        return res
+
     def get_organisation_id(self) -> str:
         res = self._get_request(f"{self._base_url}/users")
         return res["data"][0]["relationships"]["organisation"]["data"]["id"]
@@ -502,6 +522,10 @@ Response:
         )
         return res["data"]
 
+    def delete_communication_settings(self, com_setting_id: str) -> dict:
+        res = self._delete_request(f"{self._base_url}/settings/{com_setting_id}")
+        return res
+
     def get_communication_settings(self, acct_id: str) -> List[CommunicationSettings]:
         if acct_id:
             params = {"accountId": acct_id}
@@ -516,6 +540,7 @@ Response:
             attrib = s["attributes"]
             settings.append(
                 CommunicationSettings(
+                    com_setting_id=s["id"],
                     channel=attrib["channel"],
                     enabled=attrib["enabled"],
                     filter=attrib.get("filter"),
@@ -747,6 +772,31 @@ Response:
         )
         return Profile(settings=res)
 
+    @classmethod
+    def create_empty_organisation_profile(
+        cls, org_id: str, has_empty_included_field=True
+    ) -> Profile:
+        settings = {
+            "meta": {},
+            "data": {
+                "type": "profiles",
+                "id": f"organisation-{org_id}",
+                "attributes": {
+                    "name": "Organisational Profile",
+                    "description": "Organisational Profile",
+                },
+                "relationships": {"ruleSettings": {"data": []}},
+            },
+        }
+        if has_empty_included_field:
+            settings["included"] = []
+        return Profile(settings=settings)
+
+    def reset_organisation_profile(self):
+        org_id = self.get_organisation_id()
+        empty_profile = self.create_empty_organisation_profile(org_id=org_id)
+        self.update_organisation_profile(profile=empty_profile)
+
     def create_new_profile(self, profile: Profile) -> Profile:
         profile.delete_meta()
         profile.delete_profile_id()
@@ -885,19 +935,8 @@ class WorkaroundFixConformityAPI(DefaultConformityAPIBaseDecorator):
             )
         except UnauthorizedError as e:
             org_id = self.get_organisation_id()
-            empty_profile = Profile(
-                settings={
-                    "meta": {},
-                    "data": {
-                        "type": "profiles",
-                        "id": f"organisation-{org_id}",
-                        "attributes": {
-                            "name": "Organisational Profile",
-                            "description": "Organisational Profile",
-                        },
-                        "relationships": {"ruleSettings": {"data": []}},
-                    },
-                }
+            empty_profile = DefaultConformityAPI.create_empty_organisation_profile(
+                org_id=org_id, has_empty_included_field=False
             )
             return self._return_empty_obj_or_raise_error(empty_profile, e)
 

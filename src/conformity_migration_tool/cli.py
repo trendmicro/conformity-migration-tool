@@ -125,6 +125,62 @@ def verify_c1_api_credentials(c1_api: ConformityAPI):
         raise Exception("Not a valid Cloud One Conformity API URL")
 
 
+def empty_c1_conformity(user_conf_path: Path):
+    continue_ok = ask_confirmation(
+        msg="!!! WARNING !!! This will delete all your Cloud One Conformity accounts and configurations. Do you want to continue?",
+        ask_if_sure=True,
+    )
+    if not continue_ok:
+        return
+
+    if not user_conf_path.exists():
+        ask_user_to_run_configure()
+        return
+
+    conf = load_user_conf(user_conf_path)
+
+    deps = dependencies(conf)
+
+    c1_api = deps.c1_conformity_api()
+
+    print("Resetting Organisational Profile")
+    c1_api.reset_organisation_profile()
+
+    print("Deleting all Custom Profiles")
+    for prof in c1_api.get_custom_profiles():
+        print(f"  -- {prof.name}")
+        c1_api.delete_profile(profile_id=prof.profile_id)
+
+    print("Deleting all Organisational Report Configs")
+    for rconf in c1_api.list_organisation_report_configs():
+        print(f"  -- {rconf.title}")
+        c1_api.delete_report_config(report_conf_id=rconf.report_config_id)
+
+    print("Deleting all organisation-level communication settings")
+    cs_ids = {cs.com_setting_id for cs in c1_api.get_communication_settings(acct_id="")}
+    for cs_id in cs_ids:
+        print(f" -- {cs_id}")
+        c1_api.delete_communication_settings(com_setting_id=cs_id)
+
+    groups = c1_api.list_groups()
+    for group in groups:
+        print(f"Deleting Report Configs for group {group.name}")
+        for rconf in c1_api.list_group_report_configs(group_id=group.group_id):
+            print(f"  -- {rconf.title}")
+            c1_api.delete_report_config(report_conf_id=rconf.report_config_id)
+
+    print("Delete all accounts")
+    for acct in c1_api.list_accounts():
+        env_suffix = f" ({acct.environment})" if acct.environment else ""
+        print(f"  -- {acct.name}{env_suffix}")
+        c1_api.delete_account(acct_id=acct.account_id)
+
+    print("Deleting all groups")
+    for group in groups:
+        print(f"  -- {group.name}")
+        c1_api.delete_group(group_id=group.group_id)
+
+
 def run_migration(user_conf_path: Path):
     if not user_conf_path.exists():
         ask_user_to_run_configure()
@@ -527,6 +583,7 @@ def copy_communication_channel_settings(
 
         candidate_com_settings.add(
             CommunicationSettings(
+                com_setting_id=s.com_setting_id,
                 channel=s.channel,
                 enabled=s.enabled,
                 filter=s.filter,
@@ -874,6 +931,15 @@ def run():
         print(e)
         print(e.details)
         # raise e
+
+
+@cli.command(
+    "empty-c1",
+    help="Deletes all accounts and configurations in Cloud One Conformity",
+    hidden=True,
+)
+def empty_c1():
+    empty_c1_conformity(Path(USER_CONF_FILENAME))
 
 
 if __name__ == "__main__":
