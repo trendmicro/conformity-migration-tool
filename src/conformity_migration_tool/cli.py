@@ -125,6 +125,10 @@ def verify_c1_api_credentials(c1_api: ConformityAPI):
         raise Exception("Not a valid Cloud One Conformity API URL")
 
 
+def acct_env_suffix(acct_environment: str) -> str:
+    return f" ({acct_environment})" if acct_environment else ""
+
+
 def empty_c1_conformity(user_conf_path: Path):
     continue_ok = ask_confirmation(
         msg="!!! WARNING !!! This will delete all your Cloud One Conformity accounts and configurations. Do you want to continue?",
@@ -156,7 +160,7 @@ def empty_c1_conformity(user_conf_path: Path):
         print(f"  -- {rconf.title}")
         c1_api.delete_report_config(report_conf_id=rconf.report_config_id)
 
-    print("Deleting all organisation-level communication settings")
+    print("Deleting all Communication Settings (Organisation-level)")
     cs_ids = {cs.com_setting_id for cs in c1_api.get_communication_settings(acct_id="")}
     for cs_id in cs_ids:
         print(f" -- {cs_id}")
@@ -169,16 +173,35 @@ def empty_c1_conformity(user_conf_path: Path):
             print(f"  -- {rconf.title}")
             c1_api.delete_report_config(report_conf_id=rconf.report_config_id)
 
-    print("Delete all accounts")
+    print("Deleting all Accounts")
     for acct in c1_api.list_accounts():
-        env_suffix = f" ({acct.environment})" if acct.environment else ""
+        env_suffix = acct_env_suffix(acct.environment)
         print(f"  -- {acct.name}{env_suffix}")
         c1_api.delete_account(acct_id=acct.account_id)
 
-    print("Deleting all groups")
+    print("Deleting all Groups")
     for group in groups:
         print(f"  -- {group.name}")
         c1_api.delete_group(group_id=group.group_id)
+
+
+def prompt_initialize_organisation_profile():
+    print(
+        """The Organisation Profile of Cloud One Conformity must be manually initialized first before
+this tool can migrate the Organisation Profile settings. Follow these steps to initialize it:
+    1. Login to your Cloud One account.
+    2. Click Conformity.
+    3. On the top navigation bar, click on Profiles.
+    4. Under the Default profiles, click on Organisation Profile
+    5. Wait for the Rule Settings to load.
+
+    When you are done, please choose Yes below.
+"""
+    )
+
+    done = False
+    while not done:
+        done = ask_confirmation(msg="Are you done?", ask_if_sure=True)
 
 
 def run_migration(user_conf_path: Path):
@@ -193,6 +216,11 @@ def run_migration(user_conf_path: Path):
     legacy_api = deps.legacy_conformity_api()
     verify_legacy_api_credentials(legacy_api=legacy_api)
 
+    # this is part of workaround fix for Conformity Public API
+    # must be done first before we can even verify API credentials
+    # will initialize both Conformity and Organisation Profile
+    prompt_initialize_organisation_profile()
+
     c1_api = deps.c1_conformity_api()
     verify_c1_api_credentials(c1_api=c1_api)
 
@@ -200,49 +228,8 @@ def run_migration(user_conf_path: Path):
 
     add_managed_groups(legacy_api, c1_api)
 
-    c1_accts = c1_api.list_accounts()
-    legacy_accts = legacy_api.list_accounts()
-
-    legacy_cloud_type_accts_map = cloud_type_accts_map(legacy_accts)
-    c1_cloud_type_accts_map = cloud_type_accts_map(c1_accts)
-
-    cloud_accts_to_migrate: Dict[str, Dict[str, str]] = dict()
-
-    for cloud_type, legacy_accts in legacy_cloud_type_accts_map.items():
-        acct_adder = get_cloud_account_adder(
-            cloud_type=cloud_type, legacy_api=legacy_api, c1_api=c1_api
-        )
-        if acct_adder is None:
-            print(f"Does not support {cloud_type.upper()} yet! Skipping it.")
-            continue
-
-        print(f"Adding {cloud_type.upper()} accounts to CloudOne Conformity:")
-        c1_cloud_type_accounts = c1_cloud_type_accts_map.get(cloud_type, [])
-
-        accts_to_migrate: Dict[str, str] = dict()
-        cloud_accts_to_migrate[cloud_type] = accts_to_migrate
-        for acct in legacy_accts:
-            c1_acct_id: str
-            exists, c1_acct_id = acct_adder.account_exists(
-                c1_accts=c1_cloud_type_accounts, acct=acct
-            )
-            env_suffix = f" ({acct.environment})" if acct.environment else ""
-            if exists:
-                print(
-                    f"Account {acct.name}{env_suffix} already exists in CloudOne Conformity!"
-                )
-                if not (
-                    ask_confirmation(
-                        "Do you want to migrate configurations for this account (will overwrite existing ones)?",
-                        ask_if_sure=True,
-                    )
-                ):
-                    continue
-            else:
-                print(f" --> Account: {acct.name}{env_suffix}")
-                c1_acct_id = acct_adder.account_add(acct=acct)
-
-            accts_to_migrate[acct.account_id] = c1_acct_id
+    print("Adding all cloud accounts", flush=True)
+    cloud_accts_to_migrate = add_cloud_accounts(legacy_api=legacy_api, c1_api=c1_api)
 
     print("Retrieving Legacy Conformity Users", flush=True)
     legacy_users = legacy_api.get_all_users()
@@ -325,6 +312,57 @@ def update_organisation_profile(legacy_api: ConformityAPI, c1_api: ConformityAPI
             return
 
     c1_api.update_organisation_profile(profile=legacy_org_profile)
+
+
+def add_cloud_accounts(
+    legacy_api: ConformityAPI, c1_api: ConformityAPI
+) -> Dict[str, Dict[str, str]]:
+
+    c1_accts = c1_api.list_accounts()
+    legacy_accts = legacy_api.list_accounts()
+
+    legacy_cloud_type_accts_map = cloud_type_accts_map(legacy_accts)
+    c1_cloud_type_accts_map = cloud_type_accts_map(c1_accts)
+
+    cloud_accts_to_migrate: Dict[str, Dict[str, str]] = dict()
+
+    for cloud_type, legacy_accts in legacy_cloud_type_accts_map.items():
+        acct_adder = get_cloud_account_adder(
+            cloud_type=cloud_type, legacy_api=legacy_api, c1_api=c1_api
+        )
+        if acct_adder is None:
+            print(f"Does not support {cloud_type.upper()} yet! Skipping it.")
+            continue
+
+        print(f"Adding {cloud_type.upper()} accounts to CloudOne Conformity:")
+        c1_cloud_type_accounts = c1_cloud_type_accts_map.get(cloud_type, [])
+
+        accts_to_migrate: Dict[str, str] = dict()
+        cloud_accts_to_migrate[cloud_type] = accts_to_migrate
+        for acct in legacy_accts:
+            c1_acct_id: str
+            exists, c1_acct_id = acct_adder.account_exists(
+                c1_accts=c1_cloud_type_accounts, acct=acct
+            )
+            env_suffix = acct_env_suffix(acct.environment)
+            if exists:
+                print(
+                    f"Account {acct.name}{env_suffix} already exists in CloudOne Conformity!"
+                )
+                if not (
+                    ask_confirmation(
+                        "Do you want to migrate configurations for this account (will overwrite existing ones)?",
+                        ask_if_sure=True,
+                    )
+                ):
+                    continue
+            else:
+                print(f" --> Account: {acct.name}{env_suffix}")
+                c1_acct_id = acct_adder.account_add(acct=acct)
+
+            accts_to_migrate[acct.account_id] = c1_acct_id
+
+    return cloud_accts_to_migrate
 
 
 def copy_custom_profiles(legacy_api: ConformityAPI, c1_api: ConformityAPI):
@@ -613,8 +651,9 @@ def migrate_account_configurations(
     name = legacy_acct_details.name
     environment = legacy_acct_details.environment
     cloud_type = legacy_acct_details.cloud_type
+    env_suffix = acct_env_suffix(environment)
     print(
-        f"Migrating account configurations for: {name} ({environment}) [{cloud_type.upper()}]:"
+        f"Migrating account configurations for: {name}{env_suffix} [{cloud_type.upper()}]:"
     )
 
     print("  --> Updating account tags", flush=True)

@@ -898,10 +898,10 @@ class WorkaroundFixConformityAPI(DefaultConformityAPIBaseDecorator):
             raise e
 
     def _confirmed_not_a_permission_error(self) -> bool:
-        print("Confirming if not a permission error.")
+        # print("Confirming if not a permission error.")
         if not self._already_tried_to_access_users:
             try:
-                print("Trying to access users..")
+                # print("Trying to access users..")
                 self.get_all_users()
                 return True
             except Exception:
@@ -910,10 +910,10 @@ class WorkaroundFixConformityAPI(DefaultConformityAPIBaseDecorator):
 
     def _return_empty_obj_or_raise_error(self, empty_obj, e: Exception):
         if self._confirmed_not_a_permission_error():
-            print("Not really a permission error")
+            # print("Not really a permission error")
             return empty_obj
         else:
-            print("It is indeed a permission error!")
+            # print("It is indeed a permission error!")
             raise e
 
     def list_groups(self, include_group_types: List[str] = None) -> List[Group]:

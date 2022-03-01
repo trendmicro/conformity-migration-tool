@@ -3,9 +3,10 @@ from typing import Any, Dict
 
 import requests
 
-from conformity_migration.conformity_api import (  # WorkaroundFixConformityAPI,
+from conformity_migration.conformity_api import (
     ConformityAPI,
     DefaultConformityAPI,
+    WorkaroundFixConformityAPI,
 )
 
 
@@ -60,8 +61,8 @@ class AppDependencies:
         api = DefaultConformityAPI(
             api_key=api_key, base_url=base_url, http=self.custom_content_type_http()
         )
-        return api
-        # return WorkaroundFixConformityAPI(api)
+        # return api
+        return WorkaroundFixConformityAPI(api)
 
 
 def dependencies(conf: Dict[str, Any]) -> AppDependencies:
