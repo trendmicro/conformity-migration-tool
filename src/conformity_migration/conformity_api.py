@@ -96,7 +96,7 @@ class ConformityAPI(Protocol):
     def update_organisation_profile(self, profile: Profile) -> Profile:
         pass
 
-    def reset_organisation_profile(self):
+    def reset_organisation_profile(self) -> dict:
         pass
 
     def get_custom_profiles(self) -> List[Profile]:
@@ -792,10 +792,16 @@ Response:
             settings["included"] = []
         return Profile(settings=settings)
 
-    def reset_organisation_profile(self):
+    def reset_organisation_profile(self) -> dict:
         org_id = self.get_organisation_id()
-        empty_profile = self.create_empty_organisation_profile(org_id=org_id)
-        self.update_organisation_profile(profile=empty_profile)
+        profile = self.create_empty_organisation_profile(
+            org_id=org_id, has_empty_included_field=False
+        )
+        # print(json.dumps(profile.settings, indent=4))
+        res = self._post_request(
+            url=f"{self._base_url}/profiles", data=profile.settings
+        )
+        return res
 
     def create_new_profile(self, profile: Profile) -> Profile:
         profile.delete_meta()
