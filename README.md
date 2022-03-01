@@ -33,9 +33,13 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
     pip install conformity_migration_tool-<version>-py3-none-any.whl
     ```
 
-6) Run the tool
+6) Configure the tool
     ```
-    conformity-migration-tool
+    conformity-migration configure
+
+7) Run the migration
+    ```
+    conformity-migration run
     ```
 
 ## Migration support
