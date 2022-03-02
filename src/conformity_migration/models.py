@@ -5,14 +5,25 @@ from deepdiff import DeepDiff, DeepHash
 
 
 class User:
+    ROLE_ADMIN = "ADMIN"
+    ROLE_USER = "USER"
+    ROLE_READ_ONLY = "READ_ONLY"
+
     def __init__(
-        self, user_id: str, email: str, first_name: str, last_name: str, role: str
+        self,
+        user_id: str,
+        email: str,
+        first_name: str,
+        last_name: str,
+        role: str,
+        is_cloud_one_user=False,
     ) -> None:
         self.user_id = user_id
         self.email = email
         self.first_name = first_name
         self.last_name = last_name
         self.role = role
+        self.is_cloud_one_user = is_cloud_one_user
 
     def __hash__(self) -> int:
         return hash(self.email)

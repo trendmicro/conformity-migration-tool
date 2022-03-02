@@ -486,6 +486,7 @@ Response:
                     first_name=user_attrib["first-name"],
                     last_name=user_attrib["last-name"],
                     role=user_attrib["role"],
+                    is_cloud_one_user=user_attrib.get("is-cloud-one-user", False),
                 )
             )
         return users

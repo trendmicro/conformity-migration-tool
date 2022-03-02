@@ -106,8 +106,9 @@ def ask_user_to_run_configure():
 
 def verify_conformity_api_credentials(api: ConformityAPI, conformity_type: str) -> User:
     try:
-        user = api.get_all_users()[0]
-        return user
+        users = api.get_all_users()
+        admin_users = [user for user in users if user.role == User.ROLE_ADMIN]
+        return admin_users[0]
     except ConformityException as e:
         print(f"Invalid API URL or API Key for {conformity_type} Conformity")
         raise e
@@ -115,13 +116,13 @@ def verify_conformity_api_credentials(api: ConformityAPI, conformity_type: str) 
 
 def verify_legacy_api_credentials(legacy_api: ConformityAPI):
     user = verify_conformity_api_credentials(api=legacy_api, conformity_type="Legacy")
-    if user.user_id.startswith("urn:"):
+    if user.is_cloud_one_user:
         raise Exception("Not a valid Legacy Conformity API URL")
 
 
 def verify_c1_api_credentials(c1_api: ConformityAPI):
     user = verify_conformity_api_credentials(api=c1_api, conformity_type="Cloud One")
-    if not user.user_id.startswith("urn:"):
+    if not user.is_cloud_one_user:
         raise Exception("Not a valid Cloud One Conformity API URL")
 
 
