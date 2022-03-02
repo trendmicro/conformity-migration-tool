@@ -16,6 +16,8 @@ class User:
         first_name: str,
         last_name: str,
         role: str,
+        mobile_number="",
+        is_mobile_verified=False,
         is_cloud_one_user=False,
     ) -> None:
         self.user_id = user_id
@@ -23,6 +25,8 @@ class User:
         self.first_name = first_name
         self.last_name = last_name
         self.role = role
+        self.mobile_number = mobile_number
+        self.is_mobile_verified = is_mobile_verified
         self.is_cloud_one_user = is_cloud_one_user
 
     def __hash__(self) -> int:

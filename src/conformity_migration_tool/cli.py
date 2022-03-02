@@ -239,7 +239,17 @@ def run_migration(user_conf_path: Path):
     print("Retrieving CloudOne Conformity Users", flush=True)
     c1_users = c1_api.get_all_users()
 
-    invite_missing_users(legacy_users, c1_users)
+    users_to_invite = set(legacy_users).difference(set(c1_users))
+    if users_to_invite:
+        invite_users(users_to_invite)
+
+    users_to_verify_mobile = [user for user in legacy_users if user.is_mobile_verified]
+    if users_to_verify_mobile:
+        verify_users_mobile_numbers(users_to_verify_mobile)
+
+    if any([users_to_invite, users_to_verify_mobile]):
+        print("Retrieving updated list of CloudOne Conformity Users", flush=True)
+        c1_users = c1_api.get_all_users()
 
     create_user_defined_groups(legacy_api, c1_api)
 
@@ -569,33 +579,49 @@ If you lost the key, you may generate a new Client Secret on your Azure App Regi
     return ask_input("App registration key:", mask_input=True)
 
 
-def _convert_com_settings_conf_from_legacy_to_c1(
-    legacy_conf: Dict[str, Any],
+def _filter_users_with_verified_mobile(
+    c1_user_ids: List[str],
+    mobile_verified_c1_users: Set[str],
+    c1_user_id_email_map: Dict[str, str],
+) -> List[str]:
+
+    c1_user_ids_set = set(c1_user_ids)
+    unverified_user_ids = c1_user_ids_set.difference(mobile_verified_c1_users)
+    for user_id in unverified_user_ids:
+        email = c1_user_id_email_map.get(user_id, user_id)
+        print(
+            f"User {email} doesn't have a mobile number verified. Excluding from SMS notification"
+        )
+
+    verified_c1_user_ids = c1_user_ids_set.intersection(mobile_verified_c1_users)
+    return list(verified_c1_user_ids)
+
+
+def _legacy_user_ids_to_c1_user_ids(
+    legacy_user_ids: List[str],
     legacy_user_id_email_map: Dict[str, str],
     c1_email_user_id_map: Dict[str, str],
-) -> Dict[str, Any]:
-    legacy_user_ids = legacy_conf["users"]
+    channel: str,
+) -> List[str]:
     c1_user_ids = []
     for legacy_user_id in legacy_user_ids:
         email = legacy_user_id_email_map.get(legacy_user_id)
         if email is None:
             print(
-                f"Cannot find email of Legacy Conformity user with an ID of: {legacy_user_id}. Excluding user from notification."
+                f"Cannot find email of Legacy Conformity user with an ID of: {legacy_user_id}. Excluding user from {channel} notification."
             )
             continue
 
         c1_user_id = c1_email_user_id_map.get(email)
         if c1_user_id is None:
             print(
-                f"Cannot find corresponding user in CloudOne Conformity: {email}. Excluding user from notification."
+                f"Cannot find corresponding user in CloudOne Conformity: {email}. Excluding user from {channel} notification."
             )
             continue
 
         c1_user_ids.append(c1_user_id)
 
-    c1_conf = {"users": c1_user_ids}
-
-    return c1_conf
+    return c1_user_ids
 
 
 def copy_communication_channel_settings(
@@ -609,17 +635,27 @@ def copy_communication_channel_settings(
 ):
     legacy_user_id_email_map = {user.user_id: user.email for user in legacy_users}
     c1_email_user_id_map = {user.email: user.user_id for user in c1_users}
+    c1_user_id_email_map = {user.user_id: user.email for user in c1_users}
+    mobile_verified_c1_users = {
+        user.user_id for user in c1_users if user.is_mobile_verified
+    }
 
     legacy_com_settings = legacy_api.get_communication_settings(acct_id=legacy_acct_id)
     candidate_com_settings: Set[CommunicationSettings] = set()
     for s in legacy_com_settings:
         legacy_conf = s.configuration
+        c1_conf = legacy_conf
         if s.channel in ("email", "sms"):
-            c1_conf = _convert_com_settings_conf_from_legacy_to_c1(
-                legacy_conf, legacy_user_id_email_map, c1_email_user_id_map
+            c1_conf["users"] = _legacy_user_ids_to_c1_user_ids(
+                legacy_conf["users"],
+                legacy_user_id_email_map,
+                c1_email_user_id_map,
+                s.channel,
             )
-        else:
-            c1_conf = legacy_conf
+            if s.channel == "sms":
+                c1_conf["users"] = _filter_users_with_verified_mobile(
+                    c1_conf["users"], mobile_verified_c1_users, c1_user_id_email_map
+                )
 
         candidate_com_settings.add(
             CommunicationSettings(
@@ -857,27 +893,33 @@ def show_instructions_for_missing_check(check: Check):
     )
 
 
-def invite_missing_users(legacy_users: List[User], c1_users: List[User]):
-    users_to_invite = set(legacy_users).difference(set(c1_users))
-    invite_users(users_to_invite)
+def verify_users_mobile_numbers(users_to_verify_mobile: Iterable[User]):
+    print(
+        """
+Please have the following users in your CloudOne Account to have their mobile
+numbers verified. If they are one of the recipients for SMS notifications,
+then it is important to do this now before we proceed with migration:
+"""
+    )
+    for user in users_to_verify_mobile:
+        print(
+            f" --> {user.first_name} {user.last_name}; Email={user.email}; Mobile={user.mobile_number}"
+        )
+    print()
+    ask_when_mobile_verification__done()
 
 
 def invite_users(users_to_invite: Iterable[User]):
-    if not users_to_invite:
-        return
-
     print(
         """
 Please invite the following users to your CloudOne Account.
-If you are using them as recipients for your communication channel,
+If they are one of the recipients for your communication channel,
 then it is important to add them now before we proceed with migration:
 """
     )
     for user in users_to_invite:
-        print(
-            f" --> {user.first_name} {user.last_name}; Email={user.email}, Role={user.role}"
-        )
-
+        print(f" --> {user.first_name} {user.last_name}; Email={user.email}")
+    print()
     ask_when_user_invite_done()
 
 
@@ -917,12 +959,28 @@ def ask_choices(msg: str, choices: List[str], default=1):
     return answer["choice"]
 
 
+def ask_when_mobile_verification__done() -> None:
+    while True:
+        choice = ask_choices(
+            msg="Please choose 'Done' when mobile verification for users are done",
+            choices=["Not yet", "Done"],
+            default=0,
+        )
+
+        if choice == "Not yet":
+            continue
+
+        sure = ask_confirmation(f"You chose '{choice}'. Are you sure?", default=False)
+        if sure:
+            break
+
+
 def ask_when_user_invite_done() -> None:
     while True:
         choice = ask_choices(
             msg="Please choose 'Done' when you'are done adding the users to CloudOne.",
-            choices=["Done", "Not yet"],
-            default=1,
+            choices=["Not yet", "Done"],
+            default=0,
         )
 
         if choice == "Not yet":
