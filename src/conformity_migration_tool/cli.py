@@ -146,6 +146,7 @@ def empty_c1_conformity(user_conf_path: Path):
     deps = dependencies(conf)
 
     c1_api = deps.c1_conformity_api()
+    verify_c1_api_credentials(c1_api=c1_api)
 
     print("Resetting Organisational Profile")
     c1_api.reset_organisation_profile()
