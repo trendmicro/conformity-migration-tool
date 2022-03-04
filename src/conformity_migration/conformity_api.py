@@ -20,29 +20,33 @@ from .models import (
 )
 
 
-class ConformityException(Exception):
+class ConformityError(Exception):
     def __init__(self, *args: object, details="") -> None:
         super().__init__(*args)
         self.details = details
 
 
-class UnauthorizedError(ConformityException):
+class ConformityUnauthorizedError(ConformityError):
     pass
 
 
-class ResourceNotFoundError(ConformityException):
+class ConformityForbiddenError(ConformityError):
     pass
 
 
-class ClientError(ConformityException):
+class ConformityResourceNotFoundError(ConformityError):
     pass
 
 
-class ServerInternalError(ConformityException):
+class ConformityClientError(ConformityError):
     pass
 
 
-class OtherError(ConformityException):
+class ConformityServerInternalError(ConformityError):
+    pass
+
+
+class ConformityOtherError(ConformityError):
     pass
 
 
@@ -226,16 +230,18 @@ Response:
             status_code = err_resp.status_code
             details = self._err_details(resp=err_resp)
             msg = str(e)
-            if status_code == 403:
-                raise UnauthorizedError(msg, details=details) from e
+            if status_code == 401:
+                raise ConformityUnauthorizedError(msg, details=details) from e
+            elif status_code == 403:
+                raise ConformityForbiddenError(msg, details=details) from e
             elif status_code == 404:
-                raise ResourceNotFoundError(msg, details=details) from e
+                raise ConformityResourceNotFoundError(msg, details=details) from e
             elif 400 <= status_code < 500:
-                raise ClientError(msg, details=details)
+                raise ConformityClientError(msg, details=details)
             elif 500 <= status_code < 600:
-                raise ServerInternalError(msg, details=details) from e
+                raise ConformityServerInternalError(msg, details=details) from e
             else:
-                raise OtherError(msg, details=details) from e
+                raise ConformityOtherError(msg, details=details) from e
 
     def _get_request(self, url, params=None):
         return self._exec_request("GET", url, params=params)
@@ -374,7 +380,7 @@ Response:
                 f"{self._base_url}/accounts/{acct_id}/settings/rules"
             )
             return res["data"]["attributes"]["settings"]["rules"]
-        except ResourceNotFoundError:
+        except ConformityResourceNotFoundError:
             print("ResourceNotFoundError!!! So returning empty list instead :-)")
             return []
         except Exception as e:
@@ -922,19 +928,19 @@ class WorkaroundFixConformityAPI(DefaultConformityAPIBaseDecorator):
     def list_groups(self, include_group_types: List[str] = None) -> List[Group]:
         try:
             return self._api.list_groups(include_group_types=include_group_types)
-        except UnauthorizedError as e:
+        except ConformityForbiddenError as e:
             return self._return_empty_obj_or_raise_error([], e)
 
     def get_custom_profiles(self) -> List[Profile]:
         try:
             return self._api.get_custom_profiles()
-        except UnauthorizedError as e:
+        except ConformityForbiddenError as e:
             return self._return_empty_obj_or_raise_error([], e)
 
     def list_organisation_report_configs(self) -> List[ReportConfig]:
         try:
             return self._api.list_organisation_report_configs()
-        except UnauthorizedError as e:
+        except ConformityForbiddenError as e:
             return self._return_empty_obj_or_raise_error([], e)
 
     def get_organisation_profile(self, include_rule_settings=False) -> Profile:
@@ -942,7 +948,7 @@ class WorkaroundFixConformityAPI(DefaultConformityAPIBaseDecorator):
             return self._api.get_organisation_profile(
                 include_rule_settings=include_rule_settings
             )
-        except UnauthorizedError as e:
+        except ConformityForbiddenError as e:
             org_id = self.get_organisation_id()
             empty_profile = DefaultConformityAPI.create_empty_organisation_profile(
                 org_id=org_id, has_empty_included_field=False

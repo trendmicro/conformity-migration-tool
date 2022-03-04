@@ -9,7 +9,7 @@ import yaml
 from PyInquirer import prompt
 
 from conformity_migration.cloud_accounts import get_cloud_account_adder
-from conformity_migration.conformity_api import ConformityAPI, ConformityException
+from conformity_migration.conformity_api import ConformityAPI, ConformityError
 from conformity_migration.models import (
     Account,
     AccountDetails,
@@ -109,7 +109,7 @@ def verify_conformity_api_credentials(api: ConformityAPI, conformity_type: str) 
         users = api.get_all_users()
         admin_users = [user for user in users if user.role == User.ROLE_ADMIN]
         return admin_users[0]
-    except ConformityException as e:
+    except ConformityError as e:
         print(f"Invalid API URL or API Key for {conformity_type} Conformity")
         raise e
 
@@ -1026,7 +1026,7 @@ def configure():
 def run():
     try:
         run_migration(Path(USER_CONF_FILENAME))
-    except ConformityException as e:
+    except ConformityError as e:
         print(e)
         print(e.details)
         # raise e
