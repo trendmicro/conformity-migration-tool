@@ -3,6 +3,7 @@ from types import FunctionType
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote
 
+import backoff
 import requests
 from typing_extensions import Protocol
 
@@ -287,6 +288,13 @@ Response:
         res = self._get_request(f"{self._base_url}/accounts/{acct_id}/access")
         return res["attributes"]["configuration"]
 
+    @backoff.on_exception(
+        wait_gen=backoff.expo,
+        factor=2,
+        exception=ConformityClientError,
+        max_time=30,
+        jitter=None,
+    )
     def add_aws_account(
         self,
         name: str,

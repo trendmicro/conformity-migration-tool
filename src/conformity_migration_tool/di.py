@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any, Dict
 
@@ -8,6 +9,8 @@ from conformity_migration.conformity_api import (
     DefaultConformityAPI,
     WorkaroundFixConformityAPI,
 )
+
+from .utils import str2bool
 
 
 class SessionDecorator(Session):
@@ -37,6 +40,9 @@ class CustomContentTypeSession(SessionDecorator):
 class AppDependencies:
     def __init__(self, conf: Dict[str, Any]) -> None:
         self._conf = conf
+        log_backoff = str2bool(os.getenv("LOG_BACKOFF", "False"))
+        if log_backoff:
+            logging.getLogger("backoff").addHandler(logging.StreamHandler())
 
     def custom_content_type_http(self) -> Session:
         sess = Session()
