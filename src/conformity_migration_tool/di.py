@@ -1,7 +1,7 @@
 import os
 from typing import Any, Dict
 
-import requests
+from requests import Response, Session
 
 from conformity_migration.conformity_api import (
     ConformityAPI,
@@ -10,8 +10,8 @@ from conformity_migration.conformity_api import (
 )
 
 
-class SessionDecorator(requests.Session):
-    def __init__(self, sess: requests.Session) -> None:
+class SessionDecorator(Session):
+    def __init__(self, sess: Session) -> None:
         self._sess = sess
 
     def __getattr__(self, name):
@@ -24,11 +24,11 @@ class SessionDecorator(requests.Session):
 
 
 class CustomContentTypeSession(SessionDecorator):
-    def __init__(self, sess: requests.Session, content_type: str) -> None:
+    def __init__(self, sess: Session, content_type: str) -> None:
         super().__init__(sess)
         self._content_type = content_type
 
-    def request(self, *args, **kwargs) -> requests.Response:
+    def request(self, *args, **kwargs) -> Response:
         headers = kwargs.setdefault("headers", dict())
         headers["Content-Type"] = self._content_type
         return super().request(*args, **kwargs)
@@ -38,8 +38,8 @@ class AppDependencies:
     def __init__(self, conf: Dict[str, Any]) -> None:
         self._conf = conf
 
-    def custom_content_type_http(self) -> requests.Session:
-        sess = requests.Session()
+    def custom_content_type_http(self) -> Session:
+        sess = Session()
         http_content_type = os.getenv("C1_HTTP_CONTENT_TYPE")
         if http_content_type:
             sess = CustomContentTypeSession(sess=sess, content_type=http_content_type)
@@ -49,9 +49,7 @@ class AppDependencies:
         api_key = self._conf["LEGACY_CONFORMITY"]["API_KEY"]
         base_url = self._conf["LEGACY_CONFORMITY"]["API_BASE_URL"]
 
-        api = DefaultConformityAPI(
-            api_key=api_key, base_url=base_url, http=requests.Session()
-        )
+        api = DefaultConformityAPI(api_key=api_key, base_url=base_url, http=Session())
         return api
 
     def c1_conformity_api(self) -> ConformityAPI:
