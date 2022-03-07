@@ -21,6 +21,7 @@ from conformity_migration.models import (
     User,
 )
 
+from . import __version__ as tool_version
 from .di import dependencies
 
 script_dirpath = Path(__file__).parent
@@ -1011,8 +1012,9 @@ def pretty_print_com_settings(com_settings):
 
 
 @click.group(
-    help="Migrates your visiblity information in cloudconformity.com to cloudone.trendmicro.com"
+    help=f"Conformity Migration Tool (ver {tool_version})\n\nMigrates your visiblity information in cloudconformity.com to cloudone.trendmicro.com",
 )
+@click.version_option(version=tool_version)
 def cli():
     pass
 
