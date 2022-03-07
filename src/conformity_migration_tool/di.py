@@ -3,7 +3,8 @@ import os
 from typing import Any, Dict
 
 from requests import Response, Session
-from requests.adapters import BaseAdapter
+from requests.adapters import BaseAdapter, HTTPAdapter
+from urllib3 import Retry
 
 from conformity_migration.conformity_api import (
     ConformityAPI,
@@ -39,11 +40,23 @@ class AppDependencies:
     def _http(self) -> Session:
         sess = Session()
 
-        url_prefix = "https://"
-        adapter = sess.get_adapter(url=url_prefix)
+        adapter = HTTPAdapter(
+            max_retries=Retry(
+                total=None,
+                connect=0,
+                read=0,
+                redirect=0,
+                other=0,
+                backoff_factor=5,
+                status=3,  # number of retries for failed statuses that matches any of status_forcelist
+                status_forcelist=[429, 500, 501, 502, 503, 504],
+                allowed_methods=False,  # false means retry on all Methods
+                respect_retry_after_header=True,
+            )
+        )
         adapter = TimeoutHTTPAdapter(adapter, conn_timeout=5, read_timeout=60)
 
-        sess.mount(url_prefix, adapter=adapter)
+        sess.mount("https://", adapter=adapter)
         return sess
 
     def legacy_conformity_api(self) -> ConformityAPI:
