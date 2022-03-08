@@ -7,8 +7,9 @@ from requests.adapters import BaseAdapter, HTTPAdapter
 from urllib3 import Retry
 
 from conformity_migration.conformity_api import (
-    ConformityAPI,
+    CloudOneConformityAPI,
     DefaultConformityAPI,
+    LegacyConformityAPI,
     WorkaroundFixConformityAPI,
 )
 
@@ -59,23 +60,26 @@ class AppDependencies:
         sess.mount("https://", adapter=adapter)
         return sess
 
-    def legacy_conformity_api(self) -> ConformityAPI:
+    def legacy_conformity_api(self) -> LegacyConformityAPI:
         api_key = self._conf["LEGACY_CONFORMITY"]["API_KEY"]
         base_url = self._conf["LEGACY_CONFORMITY"]["API_BASE_URL"]
 
         api = DefaultConformityAPI(
             api_key=api_key, base_url=base_url, http=self._http()
         )
+        api = LegacyConformityAPI(api)
         return api
 
-    def c1_conformity_api(self) -> ConformityAPI:
+    def c1_conformity_api(self) -> CloudOneConformityAPI:
         api_key = self._conf["CLOUD_ONE_CONFORMITY"]["API_KEY"]
         base_url = self._conf["CLOUD_ONE_CONFORMITY"]["API_BASE_URL"]
 
         api = DefaultConformityAPI(
             api_key=api_key, base_url=base_url, http=self._http()
         )
-        return WorkaroundFixConformityAPI(api)
+        api = WorkaroundFixConformityAPI(api)
+        api = CloudOneConformityAPI(api)
+        return api
 
 
 def dependencies(conf: Dict[str, Any]) -> AppDependencies:

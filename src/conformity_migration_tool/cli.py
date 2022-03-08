@@ -9,7 +9,11 @@ import yaml
 from PyInquirer import prompt
 
 from conformity_migration.cloud_accounts import get_cloud_account_adder
-from conformity_migration.conformity_api import ConformityAPI, ConformityError
+from conformity_migration.conformity_api import (
+    CloudOneConformityAPI,
+    ConformityError,
+    LegacyConformityAPI,
+)
 from conformity_migration.models import (
     Account,
     AccountDetails,
@@ -105,28 +109,6 @@ def ask_user_to_run_configure():
     )
 
 
-def verify_conformity_api_credentials(api: ConformityAPI, conformity_type: str) -> User:
-    try:
-        users = api.get_all_users()
-        admin_users = [user for user in users if user.role == User.ROLE_ADMIN]
-        return admin_users[0]
-    except ConformityError as e:
-        print(f"Invalid API URL or API Key for {conformity_type} Conformity")
-        raise e
-
-
-def verify_legacy_api_credentials(legacy_api: ConformityAPI):
-    user = verify_conformity_api_credentials(api=legacy_api, conformity_type="Legacy")
-    if user.is_cloud_one_user:
-        raise Exception("Not a valid Legacy Conformity API URL")
-
-
-def verify_c1_api_credentials(c1_api: ConformityAPI):
-    user = verify_conformity_api_credentials(api=c1_api, conformity_type="Cloud One")
-    if not user.is_cloud_one_user:
-        raise Exception("Not a valid Cloud One Conformity API URL")
-
-
 def acct_env_suffix(acct_environment: str) -> str:
     return f" ({acct_environment})" if acct_environment else ""
 
@@ -148,7 +130,6 @@ def empty_c1_conformity(user_conf_path: Path):
     deps = dependencies(conf)
 
     c1_api = deps.c1_conformity_api()
-    verify_c1_api_credentials(c1_api=c1_api)
 
     print("Resetting Organisational Profile")
     c1_api.reset_organisation_profile()
@@ -217,7 +198,6 @@ def run_migration(user_conf_path: Path):
     deps = dependencies(conf)
 
     legacy_api = deps.legacy_conformity_api()
-    verify_legacy_api_credentials(legacy_api=legacy_api)
 
     # this is part of workaround fix for Conformity Public API
     # must be done first before we can even verify API credentials
@@ -225,7 +205,6 @@ def run_migration(user_conf_path: Path):
     prompt_initialize_organisation_profile()
 
     c1_api = deps.c1_conformity_api()
-    verify_c1_api_credentials(c1_api=c1_api)
 
     update_organisation_profile(legacy_api, c1_api)
 
@@ -287,7 +266,9 @@ def run_migration(user_conf_path: Path):
             print()
 
 
-def migrate_all_groups_configs(legacy_api: ConformityAPI, c1_api: ConformityAPI):
+def migrate_all_groups_configs(
+    legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
+):
     c1_group_id_map: Dict[Group, str] = {g: g.group_id for g in c1_api.list_groups()}
 
     for legacy_group in legacy_api.list_groups():
@@ -311,7 +292,9 @@ def migrate_all_groups_configs(legacy_api: ConformityAPI, c1_api: ConformityAPI)
         )
 
 
-def update_organisation_profile(legacy_api: ConformityAPI, c1_api: ConformityAPI):
+def update_organisation_profile(
+    legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
+):
     print("Copying Organisation Profile", flush=True)
     legacy_org_profile = legacy_api.get_organisation_profile(include_rule_settings=True)
     c1_org_profile = c1_api.get_organisation_profile(include_rule_settings=True)
@@ -328,7 +311,7 @@ def update_organisation_profile(legacy_api: ConformityAPI, c1_api: ConformityAPI
 
 
 def add_cloud_accounts(
-    legacy_api: ConformityAPI, c1_api: ConformityAPI
+    legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
 ) -> Dict[str, Dict[str, str]]:
 
     c1_accts = c1_api.list_accounts()
@@ -378,7 +361,9 @@ def add_cloud_accounts(
     return cloud_accts_to_migrate
 
 
-def copy_custom_profiles(legacy_api: ConformityAPI, c1_api: ConformityAPI):
+def copy_custom_profiles(
+    legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
+):
     print("Copying Custom Profiles", flush=True)
     legacy_profiles = legacy_api.get_custom_profiles()
     c1_profiles = c1_api.get_custom_profiles()
@@ -406,7 +391,7 @@ def copy_custom_profiles(legacy_api: ConformityAPI, c1_api: ConformityAPI):
 
 
 def check_existing_c1_report_configs(
-    c1_api: ConformityAPI,
+    c1_api: CloudOneConformityAPI,
     legacy_report_configs: List[ReportConfig],
     c1_report_configs: List[ReportConfig],
     rconf_type: str,
@@ -435,8 +420,8 @@ def check_existing_c1_report_configs(
 
 
 def copy_account_report_configs(
-    legacy_api: ConformityAPI,
-    c1_api: ConformityAPI,
+    legacy_api: LegacyConformityAPI,
+    c1_api: CloudOneConformityAPI,
     legacy_acct_id: str,
     c1_acct_id: str,
 ):
@@ -464,8 +449,8 @@ def copy_account_report_configs(
 
 
 def copy_group_report_configs(
-    legacy_api: ConformityAPI,
-    c1_api: ConformityAPI,
+    legacy_api: LegacyConformityAPI,
+    c1_api: CloudOneConformityAPI,
     legacy_group_id: str,
     c1_group_id: str,
 ):
@@ -493,8 +478,8 @@ def copy_group_report_configs(
 
 
 def copy_organisation_report_configs(
-    legacy_api: ConformityAPI,
-    c1_api: ConformityAPI,
+    legacy_api: LegacyConformityAPI,
+    c1_api: CloudOneConformityAPI,
 ):
     rconf_type = "Organisation"
     print(f"Copying {rconf_type} Report Configs", flush=True)
@@ -517,7 +502,9 @@ def copy_organisation_report_configs(
         )
 
 
-def create_user_defined_groups(legacy_api: ConformityAPI, c1_api: ConformityAPI):
+def create_user_defined_groups(
+    legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
+):
     print("Creating groups")
     legacy_groups = legacy_api.list_groups(
         include_group_types=[Group.GROUP_TYPE_USER_DEFINED]
@@ -538,7 +525,7 @@ def create_user_defined_groups(legacy_api: ConformityAPI, c1_api: ConformityAPI)
         print(" --> No group found.")
 
 
-def add_managed_groups(legacy_api: ConformityAPI, c1_api: ConformityAPI):
+def add_managed_groups(legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI):
     legacy_managed_groups = legacy_api.list_groups(
         include_group_types=[Group.GROUP_TYPE_MANAGED_GROUP]
     )
@@ -552,7 +539,7 @@ def add_managed_groups(legacy_api: ConformityAPI, c1_api: ConformityAPI):
             # print(f"Managed Group {mg.name} ({mg.cloud_type.upper()}) already exists!")
             continue
         if mg.cloud_type == "azure":
-            azure_conf = mg.cloud_data["azure"]  # type: ignore
+            azure_conf = mg.cloud_data["azure"]
             directory_name = mg.name
             directory_id = azure_conf["directoryId"]
             app_client_id = azure_conf["applicationId"]
@@ -626,8 +613,8 @@ def _legacy_user_ids_to_c1_user_ids(
 
 
 def copy_communication_channel_settings(
-    legacy_api: ConformityAPI,
-    c1_api: ConformityAPI,
+    legacy_api: LegacyConformityAPI,
+    c1_api: CloudOneConformityAPI,
     legacy_acct_id: str,
     c1_acct_id: str,
     legacy_users: List[User],
@@ -677,8 +664,8 @@ def copy_communication_channel_settings(
 
 
 def migrate_account_configurations(
-    legacy_api: ConformityAPI,
-    c1_api: ConformityAPI,
+    legacy_api: LegacyConformityAPI,
+    c1_api: CloudOneConformityAPI,
     legacy_acct_id: str,
     c1_acct_id: str,
     legacy_users: List[User],
@@ -755,8 +742,8 @@ def migrate_account_configurations(
 
 
 def copy_account_rules_settings(
-    legacy_api: ConformityAPI,
-    c1_api: ConformityAPI,
+    legacy_api: LegacyConformityAPI,
+    c1_api: CloudOneConformityAPI,
     legacy_acct_id: str,
     c1_acct_id: str,
     legacy_acct_details: AccountDetails,
@@ -828,21 +815,21 @@ def create_new_note_from_history_of_notes(
     return note_msg
 
 
-def wait_for_bot_scan_to_finish(c1_api: ConformityAPI, acct_id: str):
+def wait_for_bot_scan_to_finish(c1_api: CloudOneConformityAPI, acct_id: str):
     while not c1_api.is_bot_scan_done(acct_id=acct_id):
         print(".", end="", flush=True)
         time.sleep(APP_CONF["BOT_SCAN_CHECK_INTERVAL_IN_SECS"])
         continue
 
 
-def has_suppressed_check(legacy_api: ConformityAPI, acct_id: str) -> bool:
+def has_suppressed_check(legacy_api: LegacyConformityAPI, acct_id: str) -> bool:
     checks = legacy_api.get_suppressed_checks(acct_id=acct_id, limit=1)
     return len(list(checks)) > 0
 
 
 def copy_suppressed_checks(
-    legacy_api: ConformityAPI,
-    c1_api: ConformityAPI,
+    legacy_api: LegacyConformityAPI,
+    c1_api: CloudOneConformityAPI,
     legacy_acct_id: str,
     c1_acct_id: str,
 ):
@@ -1040,7 +1027,12 @@ def run():
     hidden=True,
 )
 def empty_c1():
-    empty_c1_conformity(Path(USER_CONF_FILENAME))
+    try:
+        empty_c1_conformity(Path(USER_CONF_FILENAME))
+    except ConformityError as e:
+        print(e)
+        print(e.details)
+        # raise e
 
 
 if __name__ == "__main__":

@@ -1,11 +1,10 @@
 import json
-from types import FunctionType
+from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote
 
 import backoff
 import requests
-from typing_extensions import Protocol
 
 from .models import (
     Account,
@@ -19,12 +18,17 @@ from .models import (
     Rule,
     User,
 )
+from .typing import Protocol
 
 
 class ConformityError(Exception):
     def __init__(self, *args: object, details="") -> None:
         super().__init__(*args)
         self.details = details
+
+
+class ConformityConnectionError(ConformityError):
+    pass
 
 
 class ConformityUnauthorizedError(ConformityError):
@@ -52,6 +56,9 @@ class ConformityOtherError(ConformityError):
 
 
 class ConformityAPI(Protocol):
+    def current_user(self) -> User:
+        pass
+
     def get_organisation_external_id(self) -> str:
         pass
 
@@ -213,6 +220,7 @@ class DefaultConformityAPI:
             "Authorization": f"ApiKey {self._api_key}",
             "Content-Type": "application/vnd.api+json",
         }
+        self._validate_api()
         self._organisation_external_id = ""
 
     def _err_details(self, resp: requests.Response) -> str:
@@ -258,17 +266,40 @@ Response:
 
     def _exec_request(self, method, url, params=None, data=None):
         json_data = json.dumps(data, indent=4) if data else None
-        resp = self.http.request(
-            method=method,
-            url=url,
-            params=params,
-            data=json_data,
-            headers=self._headers,
-        )
-        # resp.raise_for_status()
-        self._raise_for_status(resp)
+        try:
+            resp = self.http.request(
+                method=method,
+                url=url,
+                params=params,
+                data=json_data,
+                headers=self._headers,
+            )
+        except requests.exceptions.ConnectTimeout as e:
+            raise ConformityConnectionError(
+                f"Cannot connect to {self._base_url}"
+            ) from e
+        else:
+            self._raise_for_status(resp)
 
-        return resp.json()
+            return resp.json()
+
+    def _validate_api(self):
+        try:
+            user = self.current_user()
+        except ConformityForbiddenError as e:
+            raise ConformityForbiddenError(
+                f"API Key does not have permission for: {self._base_url}"
+            ) from e
+        else:
+            if user.role != User.ROLE_ADMIN:
+                raise ConformityForbiddenError(
+                    f"Insufficient permisison. API Key must have an ADMIN privilege for: {self._base_url}"
+                )
+
+    @lru_cache(maxsize=1)
+    def current_user(self) -> User:
+        res = self._get_request(f"{self._base_url}/users/whoami")
+        return self._user_dict_to_user_obj(res["data"])
 
     def delete_account(self, acct_id: str) -> dict:
         res = self._delete_request(f"{self._base_url}/accounts/{acct_id}")
@@ -485,26 +516,28 @@ Response:
         res = self._get_request(f"{self._base_url}/users")
         return res["data"]
 
+    def _user_dict_to_user_obj(self, u: dict) -> User:
+        user_attrib = u["attributes"]
+        email: str = user_attrib.get("email", "")
+        return User(
+            user_id=u["id"],
+            email=email,
+            first_name=user_attrib.get("first-name", ""),
+            last_name=user_attrib.get("last-name", ""),
+            role=user_attrib["role"],
+            mobile_number=user_attrib.get("mobile", ""),
+            is_mobile_verified=user_attrib.get("mobile-verified", False),
+            is_cloud_one_user=user_attrib.get("is-cloud-one-user", False),
+        )
+
     def get_all_users(self) -> List[User]:
         res = self._get_request(f"{self._base_url}/users")
         users = []
         for u in res["data"]:
-            user_attrib = u["attributes"]
-            email: str = user_attrib.get("email")
-            if not email:  # skip users who does not have email, e.g. Api key user
+            user = self._user_dict_to_user_obj(u)
+            if not user.email:  # skip users who does not have email, e.g. Api key user
                 continue
-            users.append(
-                User(
-                    user_id=u["id"],
-                    email=email,
-                    first_name=user_attrib["first-name"],
-                    last_name=user_attrib["last-name"],
-                    role=user_attrib["role"],
-                    mobile_number=user_attrib.get("mobile", ""),
-                    is_mobile_verified=user_attrib.get("mobile-verified", False),
-                    is_cloud_one_user=user_attrib.get("is-cloud-one-user", False),
-                )
-            )
+            users.append(user)
         return users
 
     def get_user_details(self, user_id: str) -> dict:
@@ -875,30 +908,41 @@ Response:
         return res
 
 
-class DefaultConformityAPIBaseDecorator(ConformityAPI):
+class ConformityAPIBaseDecorator:
     def __init__(self, api: ConformityAPI) -> None:
         self._api = api
-        self._methods = {
-            k for k, v in self.__class__.__dict__.items() if isinstance(v, FunctionType)
-        }
 
-    def __getattribute__(self, name: str) -> Any:
-        if name in {"__getattr__", "__class__", "_api", "_methods"}:
-            return super().__getattribute__(name)
-        if name in self._methods:
-            return super().__getattribute__(name)
-        return self.__getattr__(name)
+    @property
+    def api(self) -> ConformityAPI:
+        return self._api
 
     def __getattr__(self, name):
         return getattr(self._api, name)
 
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name == "_api":
-            return super().__setattr__(name, value)
-        return setattr(self._api, name, value)
+
+class LegacyConformityAPI(ConformityAPIBaseDecorator):
+    def __init__(self, api: ConformityAPI) -> None:
+        super().__init__(api)
+        self._validate_api()
+
+    def _validate_api(self):
+        user = self.current_user()
+        if user.is_cloud_one_user:
+            raise ConformityError("Not a valid Legacy Conformity API URL")
 
 
-class WorkaroundFixConformityAPI(DefaultConformityAPIBaseDecorator):
+class CloudOneConformityAPI(ConformityAPIBaseDecorator):
+    def __init__(self, api: ConformityAPI) -> None:
+        super().__init__(api)
+        self._validate_api()
+
+    def _validate_api(self):
+        user = self.current_user()
+        if not user.is_cloud_one_user:
+            raise ConformityError("Not a valid Cloud One Conformity API URL")
+
+
+class WorkaroundFixConformityAPI(ConformityAPIBaseDecorator):
     def __init__(self, api: ConformityAPI) -> None:
         super().__init__(api)
         self._already_tried_to_access_users = False
@@ -907,7 +951,7 @@ class WorkaroundFixConformityAPI(DefaultConformityAPIBaseDecorator):
     def get_all_users(self) -> List[User]:
         try:
             self._already_tried_to_access_users = True
-            users = self._api.get_all_users()
+            users = self.api.get_all_users()
             self._successfully_accessed_users = True
             return users
         except Exception as e:
@@ -935,25 +979,25 @@ class WorkaroundFixConformityAPI(DefaultConformityAPIBaseDecorator):
 
     def list_groups(self, include_group_types: List[str] = None) -> List[Group]:
         try:
-            return self._api.list_groups(include_group_types=include_group_types)
+            return self.api.list_groups(include_group_types=include_group_types)
         except ConformityForbiddenError as e:
             return self._return_empty_obj_or_raise_error([], e)
 
     def get_custom_profiles(self) -> List[Profile]:
         try:
-            return self._api.get_custom_profiles()
+            return self.api.get_custom_profiles()
         except ConformityForbiddenError as e:
             return self._return_empty_obj_or_raise_error([], e)
 
     def list_organisation_report_configs(self) -> List[ReportConfig]:
         try:
-            return self._api.list_organisation_report_configs()
+            return self.api.list_organisation_report_configs()
         except ConformityForbiddenError as e:
             return self._return_empty_obj_or_raise_error([], e)
 
     def get_organisation_profile(self, include_rule_settings=False) -> Profile:
         try:
-            return self._api.get_organisation_profile(
+            return self.api.get_organisation_profile(
                 include_rule_settings=include_rule_settings
             )
         except ConformityForbiddenError as e:
@@ -964,13 +1008,13 @@ class WorkaroundFixConformityAPI(DefaultConformityAPIBaseDecorator):
             return self._return_empty_obj_or_raise_error(empty_profile, e)
 
     def list_accounts(self) -> List[Account]:
-        accts = self._api.list_accounts()
+        accts = self.api.list_accounts()
         if accts is None:
             accts = []
         return accts
 
     def get_communication_settings(self, acct_id: str) -> List[CommunicationSettings]:
-        com_settings = self._api.get_communication_settings(acct_id=acct_id)
+        com_settings = self.api.get_communication_settings(acct_id=acct_id)
         if com_settings is None:
             com_settings = []
         return com_settings
