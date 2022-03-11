@@ -283,10 +283,10 @@ class AccountDetails(Account):
 
     @property
     def rules(self) -> List[Rule]:
-        return [
-            Rule(setting=rule_setting)
-            for rule_setting in self.attributes["settings"].get("rules", [])
-        ]
+        rsettings = self.attributes["settings"].get("rules")
+        if not rsettings:
+            return []
+        return [Rule(setting=rule_setting) for rule_setting in rsettings]
 
     @property
     def bot_settings(self) -> Union[Dict[str, Any], None]:
