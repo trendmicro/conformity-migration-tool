@@ -11,5 +11,6 @@ REQUIRES = [
     "PyInquirer>=1.0.3,<2.0.0",
     "click>=8.0.0,<9.0.0",
     "importlib_metadata; python_version < '3.8'",
+    "boto3>=1.0.0,<2.0.0",
 ]
 setup(name="conformity-migration-tool", install_requires=REQUIRES)
