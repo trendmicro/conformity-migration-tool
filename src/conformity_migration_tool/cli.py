@@ -693,9 +693,10 @@ def migrate_account_configurations(
     print("  --> Copying account bot settings", flush=True)
     # bot_settings = legacy_api.get_account_bot_settings(acct_id=legacy_acct_id)
     bot_settings = legacy_acct_details.bot_settings
-    del bot_settings["lastModifiedFrom"]
-    del bot_settings["lastModifiedBy"]
-    c1_api.update_account_bot_settings(acct_id=c1_acct_id, settings=bot_settings)
+    if bot_settings:
+        del bot_settings["lastModifiedFrom"]
+        del bot_settings["lastModifiedBy"]
+        c1_api.update_account_bot_settings(acct_id=c1_acct_id, settings=bot_settings)
 
     print("  --> Copying account rules settings:", flush=True)
     copy_account_rules_settings(

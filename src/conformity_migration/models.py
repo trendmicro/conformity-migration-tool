@@ -289,8 +289,8 @@ class AccountDetails(Account):
         ]
 
     @property
-    def bot_settings(self) -> Dict[str, Any]:
-        return self.attributes["settings"]["bot"]
+    def bot_settings(self) -> Union[Dict[str, Any], None]:
+        return self.attributes["settings"].get("bot")
 
     @property
     def bot_status(self) -> Union[str, None]:
