@@ -82,6 +82,8 @@ class TimeoutHTTPAdapter(BaseAdapter):
 def _http() -> Session:
     sess = Session()
 
+    app_conf = app_config()
+
     adapter = HTTPAdapter(
         max_retries=Retry(
             total=None,
@@ -89,14 +91,19 @@ def _http() -> Session:
             read=0,
             redirect=0,
             other=0,
-            backoff_factor=5,
-            status=3,  # number of retries for failed statuses that matches any of status_forcelist
-            status_forcelist=[429, 500, 501, 502, 503, 504],
+            backoff_factor=app_conf["API_RETRY_BACKOFF_FACTOR"],
+            status=app_conf["API_RETRY_COUNT"],  # max retries for any status_forcelist
+            status_forcelist=app_conf["API_RETRY_HTTP_STATUSES"],
             allowed_methods=False,  # false means retry on all Methods
             respect_retry_after_header=True,
         )
     )
-    adapter = TimeoutHTTPAdapter(adapter, conn_timeout=5, read_timeout=60)
+
+    adapter = TimeoutHTTPAdapter(
+        adapter,
+        conn_timeout=app_conf["API_CONNECTION_TIMEOUT"],
+        read_timeout=app_conf["API_READ_TIMEOUT"],
+    )
 
     sess.mount("https://", adapter=adapter)
     return sess
