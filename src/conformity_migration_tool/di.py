@@ -1,7 +1,11 @@
 import logging
 import os
+import sys
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict
 
+import yaml
 from requests import Response, Session
 from requests.adapters import BaseAdapter, HTTPAdapter
 from urllib3 import Retry
@@ -14,6 +18,50 @@ from conformity_migration.conformity_api import (
 )
 
 from .utils import str2bool
+
+log_backoff = str2bool(os.getenv("LOG_BACKOFF", "False"))
+if log_backoff:
+    logging.getLogger("backoff").addHandler(logging.StreamHandler())
+
+
+script_dirpath = Path(__file__).parent
+script_name = Path(sys.argv[0]).name
+
+USER_CONF_FILENAME = "user_config.yml"
+APP_CONF_FILENAME = "config.yml"
+
+
+def _load_yaml_config(yaml_path: Path):
+    with open(yaml_path, mode="r") as fh:
+        return yaml.load(fh, Loader=yaml.SafeLoader)
+
+
+def app_config_path() -> Path:
+    return script_dirpath.joinpath(APP_CONF_FILENAME)
+
+
+@lru_cache(maxsize=1)
+def app_config() -> Dict[str, Any]:
+    return _load_yaml_config(app_config_path())
+
+
+def ask_user_to_run_configure():
+    print(
+        f"Please configure migration tool by running this command: {script_name} configure"
+    )
+    sys.exit(1)
+
+
+def user_config_path() -> Path:
+    return Path(USER_CONF_FILENAME)
+
+
+@lru_cache(maxsize=1)
+def user_config() -> Dict[str, Any]:
+    path = user_config_path()
+    if not path.exists():
+        ask_user_to_run_configure()
+    return _load_yaml_config(path)
 
 
 class TimeoutHTTPAdapter(BaseAdapter):
@@ -31,56 +79,45 @@ class TimeoutHTTPAdapter(BaseAdapter):
         return self._adapter.close()
 
 
-class AppDependencies:
-    def __init__(self, conf: Dict[str, Any]) -> None:
-        self._conf = conf
-        log_backoff = str2bool(os.getenv("LOG_BACKOFF", "False"))
-        if log_backoff:
-            logging.getLogger("backoff").addHandler(logging.StreamHandler())
+def _http() -> Session:
+    sess = Session()
 
-    def _http(self) -> Session:
-        sess = Session()
-
-        adapter = HTTPAdapter(
-            max_retries=Retry(
-                total=None,
-                connect=0,
-                read=0,
-                redirect=0,
-                other=0,
-                backoff_factor=5,
-                status=3,  # number of retries for failed statuses that matches any of status_forcelist
-                status_forcelist=[429, 500, 501, 502, 503, 504],
-                allowed_methods=False,  # false means retry on all Methods
-                respect_retry_after_header=True,
-            )
+    adapter = HTTPAdapter(
+        max_retries=Retry(
+            total=None,
+            connect=0,
+            read=0,
+            redirect=0,
+            other=0,
+            backoff_factor=5,
+            status=3,  # number of retries for failed statuses that matches any of status_forcelist
+            status_forcelist=[429, 500, 501, 502, 503, 504],
+            allowed_methods=False,  # false means retry on all Methods
+            respect_retry_after_header=True,
         )
-        adapter = TimeoutHTTPAdapter(adapter, conn_timeout=5, read_timeout=60)
+    )
+    adapter = TimeoutHTTPAdapter(adapter, conn_timeout=5, read_timeout=60)
 
-        sess.mount("https://", adapter=adapter)
-        return sess
-
-    def legacy_conformity_api(self) -> LegacyConformityAPI:
-        api_key = self._conf["LEGACY_CONFORMITY"]["API_KEY"]
-        base_url = self._conf["LEGACY_CONFORMITY"]["API_BASE_URL"]
-
-        api = DefaultConformityAPI(
-            api_key=api_key, base_url=base_url, http=self._http()
-        )
-        api = LegacyConformityAPI(api)
-        return api
-
-    def c1_conformity_api(self) -> CloudOneConformityAPI:
-        api_key = self._conf["CLOUD_ONE_CONFORMITY"]["API_KEY"]
-        base_url = self._conf["CLOUD_ONE_CONFORMITY"]["API_BASE_URL"]
-
-        api = DefaultConformityAPI(
-            api_key=api_key, base_url=base_url, http=self._http()
-        )
-        api = WorkaroundFixConformityAPI(api)
-        api = CloudOneConformityAPI(api)
-        return api
+    sess.mount("https://", adapter=adapter)
+    return sess
 
 
-def dependencies(conf: Dict[str, Any]) -> AppDependencies:
-    return AppDependencies(conf)
+def legacy_conformity_api() -> LegacyConformityAPI:
+    user_conf = user_config()
+    api_key = user_conf["LEGACY_CONFORMITY"]["API_KEY"]
+    base_url = user_conf["LEGACY_CONFORMITY"]["API_BASE_URL"]
+
+    api = DefaultConformityAPI(api_key=api_key, base_url=base_url, http=_http())
+    api = LegacyConformityAPI(api)
+    return api
+
+
+def c1_conformity_api() -> CloudOneConformityAPI:
+    user_conf = user_config()
+    api_key = user_conf["CLOUD_ONE_CONFORMITY"]["API_KEY"]
+    base_url = user_conf["CLOUD_ONE_CONFORMITY"]["API_BASE_URL"]
+
+    api = DefaultConformityAPI(api_key=api_key, base_url=base_url, http=_http())
+    api = WorkaroundFixConformityAPI(api)
+    api = CloudOneConformityAPI(api)
+    return api

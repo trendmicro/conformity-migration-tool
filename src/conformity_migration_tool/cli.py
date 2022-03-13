@@ -1,4 +1,3 @@
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,26 +25,7 @@ from conformity_migration.models import (
 )
 
 from . import __version__ as tool_version
-from .di import dependencies
-
-script_dirpath = Path(__file__).parent
-script_name = Path(sys.argv[0]).name
-
-USER_CONF_FILENAME = "user_config.yml"
-APP_CONF_FILENAME = "config.yml"
-
-
-def get_conf() -> Any:
-    with open(script_dirpath.joinpath(APP_CONF_FILENAME), mode="r") as fh:
-        return yaml.load(fh, Loader=yaml.SafeLoader)
-
-
-APP_CONF = get_conf()
-
-
-def load_user_conf(user_conf_path: Path):
-    with open(user_conf_path, mode="r") as fh:
-        return yaml.load(fh, Loader=yaml.SafeLoader)
+from .di import app_config, c1_conformity_api, legacy_conformity_api, user_config_path
 
 
 def create_user_config(user_conf_path: Path):
@@ -57,7 +37,7 @@ def create_user_config(user_conf_path: Path):
         if not recreate_ok:
             return
 
-    region_map = APP_CONF["REGION_API_URL"]
+    region_map = app_config()["REGION_API_URL"]
     region_choices = [*region_map.keys(), "Other"]
     legacy_region = ask_choices(
         msg="Legacy Conformity Region", choices=region_choices, default=1
@@ -103,33 +83,17 @@ def cloud_type_accts_map(accts: List[Account]) -> Dict[str, List[Account]]:
     return accts_map
 
 
-def ask_user_to_run_configure():
-    print(
-        f"Please configure migration tool by running this command: {script_name} configure"
-    )
-
-
 def acct_env_suffix(acct_environment: str) -> str:
     return f" ({acct_environment})" if acct_environment else ""
 
 
-def empty_c1_conformity(user_conf_path: Path):
+def empty_c1_conformity(c1_api: CloudOneConformityAPI):
     continue_ok = ask_confirmation(
         msg="!!! WARNING !!! This will delete all your Cloud One Conformity accounts and configurations. Do you want to continue?",
         ask_if_sure=True,
     )
     if not continue_ok:
         return
-
-    if not user_conf_path.exists():
-        ask_user_to_run_configure()
-        return
-
-    conf = load_user_conf(user_conf_path)
-
-    deps = dependencies(conf)
-
-    c1_api = deps.c1_conformity_api()
 
     print("Resetting Organisational Profile")
     c1_api.reset_organisation_profile()
@@ -188,23 +152,10 @@ this tool can migrate the Organisation Profile settings. Follow these steps to i
         done = ask_confirmation(msg="Are you done?", ask_if_sure=True)
 
 
-def run_migration(user_conf_path: Path):
-    if not user_conf_path.exists():
-        ask_user_to_run_configure()
-        return
-
-    conf = load_user_conf(user_conf_path)
-
-    deps = dependencies(conf)
-
-    legacy_api = deps.legacy_conformity_api()
-
+def run_migration(legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI):
     # this is part of workaround fix for Conformity Public API
-    # must be done first before we can even verify API credentials
-    # will initialize both Conformity and Organisation Profile
+    # will initialize Organisation Profile
     prompt_initialize_organisation_profile()
-
-    c1_api = deps.c1_conformity_api()
 
     update_organisation_profile(legacy_api, c1_api)
 
@@ -819,7 +770,7 @@ def create_new_note_from_history_of_notes(
 def wait_for_bot_scan_to_finish(c1_api: CloudOneConformityAPI, acct_id: str):
     while not c1_api.is_bot_scan_done(acct_id=acct_id):
         print(".", end="", flush=True)
-        time.sleep(APP_CONF["BOT_SCAN_CHECK_INTERVAL_IN_SECS"])
+        time.sleep(app_config()["BOT_SCAN_CHECK_INTERVAL_IN_SECS"])
         continue
 
 
@@ -1009,13 +960,13 @@ def cli():
 
 @cli.command(help="Configures migration tool")
 def configure():
-    create_user_config(Path(USER_CONF_FILENAME))
+    create_user_config(user_config_path())
 
 
 @cli.command(help="Runs migration")
 def run():
     try:
-        run_migration(Path(USER_CONF_FILENAME))
+        run_migration(legacy_api=legacy_conformity_api(), c1_api=c1_conformity_api())
     except ConformityError as e:
         print(e)
         print(e.details)
@@ -1029,7 +980,7 @@ def run():
 )
 def empty_c1():
     try:
-        empty_c1_conformity(Path(USER_CONF_FILENAME))
+        empty_c1_conformity(c1_api=c1_conformity_api())
     except ConformityError as e:
         print(e)
         print(e.details)
