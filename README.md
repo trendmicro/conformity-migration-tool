@@ -34,11 +34,33 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 7) Configure the tool
     ```
     conformity-migration configure
+    ```
 
-8) Run the migration
+8) If you have AWS accounts, you have the option to use this CLI for updating your ExternalId:
+   ```
+   conformity-migration-aws generate-csv <CSV_FILE>
+   ```
+   Update your CSV file with your AWS credentials. Then use the updated csv to run the command below:
+   ```
+   conformity-migration-aws update-stack --csv-file <CSV_FILE>
+   ```
+   You can also run this CLI to update an invidual account's stack, which is useful if you want to
+   wrap it in your own script that will iterate through all your accounts. To find those options,
+   please run this command:
+   ```
+   conformity-migration-aws update-stack --help
+   ```
+
+9)  Run the migration
     ```
     conformity-migration run
     ```
+    If you already updated your AWS accounts' ExternalId beforehand as in step #8, then you can add this
+    option below so it will stop prompting you to update your ExternalId manually:
+    ```
+    conformity-migration run --skip-aws-prompt
+    ```
+
 
 ## Migration support
 ### Cloud Types
