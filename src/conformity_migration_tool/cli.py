@@ -1,3 +1,4 @@
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -964,7 +965,17 @@ def configure():
 
 
 @cli.command(help="Runs migration")
-def run():
+@click.option(
+    "--skip-aws-prompt",
+    is_flag=True,
+    envvar="SKIP_AWS_PROMPT",
+    show_envvar=True,
+    required=False,
+    default=False,
+    help="Skips prompting for manually edit AWS Conformity stack",
+)
+def run(skip_aws_prompt: bool):
+    os.environ["SKIP_AWS_PROMPT"] = "True" if skip_aws_prompt else "False"
     try:
         run_migration(legacy_api=legacy_conformity_api(), c1_api=c1_conformity_api())
     except ConformityError as e:
