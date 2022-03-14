@@ -26,7 +26,6 @@ if log_backoff:
 
 
 script_dirpath = Path(__file__).parent
-script_name = Path(sys.argv[0]).name
 
 USER_CONF_FILENAME = "user_config.yml"
 APP_CONF_FILENAME = "config.yml"
@@ -48,7 +47,7 @@ def app_config() -> Dict[str, Any]:
 
 def ask_user_to_run_configure():
     print(
-        f"Please configure migration tool by running this command: {script_name} configure"
+        "Please configure migration tool by running this command: conformity-migration configure"
     )
     sys.exit(1)
 
