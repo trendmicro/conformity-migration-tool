@@ -1,7 +1,10 @@
+import os
 from abc import ABCMeta, abstractmethod
 from typing import List, Tuple, Union
 
 from PyInquirer import prompt
+
+from conformity_migration_tool.utils import str2bool
 
 from .conformity_api import ConformityAPI
 from .models import Account
@@ -52,12 +55,14 @@ class AWSCloudAccountAdder(CloudAccountAdder):
         role_arn = access_conf["roleArn"]
         old_external_id = access_conf["externalId"]
 
-        self.show_update_stack_external_id_instructions(
-            aws_acct_num=aws_acct_num,
-            old_external_id=old_external_id,
-            new_external_id=c1_external_id,
-        )
-        prompt_continue()
+        skip_aws_prompt = str2bool(os.getenv("SKIP_AWS_PROMPT", "False"))
+        if not skip_aws_prompt:
+            self.show_update_stack_external_id_instructions(
+                aws_acct_num=aws_acct_num,
+                old_external_id=old_external_id,
+                new_external_id=c1_external_id,
+            )
+            prompt_continue()
 
         res = self.c1_api.add_aws_account(
             name=name,
