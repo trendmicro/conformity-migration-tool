@@ -274,7 +274,7 @@ def _fill_acct_with_defaults(
 
 def read_csv_file(csv_file: str) -> Iterable[AccountStackInfo]:
     with open(csv_file, mode="r") as fh:
-        csvr = csv.DictReader(fh)
+        csvr = csv.DictReader(fh, dialect="excel")
         for rec in csvr:
             acct = AccountStackInfo(
                 account_name=rec["Account Name"],
