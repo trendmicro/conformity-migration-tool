@@ -1,4 +1,3 @@
 mypy
 types-requests
 types-PyYAML
-boto3-stubs[cloudformation]
