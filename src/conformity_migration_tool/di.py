@@ -9,6 +9,7 @@ import yaml
 from requests import Response, Session
 from requests.adapters import BaseAdapter, HTTPAdapter
 from urllib3 import Retry
+from vcr import VCR
 
 from conformity_migration.conformity_api import (
     CloudOneConformityAPI,
@@ -79,9 +80,21 @@ class TimeoutHTTPAdapter(BaseAdapter):
         return self._adapter.close()
 
 
-def _http() -> Session:
-    sess = Session()
+class VcrHTTPAdapter(BaseAdapter):
+    def __init__(self, adapter: BaseAdapter, vcr: VCR, vcr_file: str):
+        self._adapter = adapter
+        self._vcr = vcr
+        self._vcr_file = vcr_file
 
+    def send(self, *args, **kwargs) -> Response:
+        with self._vcr.use_cassette(path=self._vcr_file):
+            return self._adapter.send(*args, **kwargs)
+
+    def close(self) -> None:
+        return self._adapter.close()
+
+
+def _http_adapter() -> BaseAdapter:
     app_conf = app_config()
 
     adapter = HTTPAdapter(
@@ -104,7 +117,29 @@ def _http() -> Session:
         conn_timeout=app_conf["API_CONNECTION_TIMEOUT"],
         read_timeout=app_conf["API_READ_TIMEOUT"],
     )
+    return adapter
 
+
+def _legacy_http() -> Session:
+    sess = Session()
+    adapter = _http_adapter()
+    vcr_file = os.getenv("VCR_FILE")
+    if vcr_file:
+        vcr_mode = os.getenv("VCR_MODE", "none")
+        fake_api_key = "fake-api-key-for-legacy_conformity"
+        vcr = VCR(
+            record_mode=vcr_mode,
+            match_on=("method", "scheme", "host", "port", "path", "query", "body"),
+            filter_headers=[("Authorization", f"ApiKey {fake_api_key}")],
+        )
+        adapter = VcrHTTPAdapter(adapter=adapter, vcr=vcr, vcr_file=vcr_file)
+    sess.mount("https://", adapter=adapter)
+    return sess
+
+
+def _c1_http() -> Session:
+    sess = Session()
+    adapter = _http_adapter()
     sess.mount("https://", adapter=adapter)
     return sess
 
@@ -114,7 +149,7 @@ def legacy_conformity_api() -> LegacyConformityAPI:
     api_key = user_conf["LEGACY_CONFORMITY"]["API_KEY"]
     base_url = user_conf["LEGACY_CONFORMITY"]["API_BASE_URL"]
 
-    api = DefaultConformityAPI(api_key=api_key, base_url=base_url, http=_http())
+    api = DefaultConformityAPI(api_key=api_key, base_url=base_url, http=_legacy_http())
     api = LegacyConformityAPI(api)
     return api
 
@@ -124,7 +159,7 @@ def c1_conformity_api() -> CloudOneConformityAPI:
     api_key = user_conf["CLOUD_ONE_CONFORMITY"]["API_KEY"]
     base_url = user_conf["CLOUD_ONE_CONFORMITY"]["API_BASE_URL"]
 
-    api = DefaultConformityAPI(api_key=api_key, base_url=base_url, http=_http())
+    api = DefaultConformityAPI(api_key=api_key, base_url=base_url, http=_c1_http())
     api = WorkaroundFixConformityAPI(api)
     api = CloudOneConformityAPI(api)
     return api
