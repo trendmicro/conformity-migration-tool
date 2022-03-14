@@ -902,34 +902,26 @@ def ask_choices(msg: str, choices: List[str], default=1):
 
 def ask_when_mobile_verification__done() -> None:
     while True:
-        choice = ask_choices(
-            msg="Please choose 'Done' when mobile verification for users are done",
-            choices=["Not yet", "Done"],
-            default=0,
+
+        is_done = ask_confirmation(
+            "Are you done with mobile verification?",
+            default=False,
+            ask_if_sure=True,
         )
-
-        if choice == "Not yet":
-            continue
-
-        sure = ask_confirmation(f"You chose '{choice}'. Are you sure?", default=False)
-        if sure:
-            break
+        if is_done:
+            return
 
 
 def ask_when_user_invite_done() -> None:
     while True:
-        choice = ask_choices(
-            msg="Please choose 'Done' when you'are done adding the users to CloudOne.",
-            choices=["Not yet", "Done"],
-            default=0,
+
+        is_done = ask_confirmation(
+            "Are you done adding the users to Cloud One?",
+            default=False,
+            ask_if_sure=True,
         )
-
-        if choice == "Not yet":
-            continue
-
-        sure = ask_confirmation(f"You chose '{choice}'. Are you sure?", default=False)
-        if sure:
-            break
+        if is_done:
+            return
 
 
 def ask_input(msg: str, mask_input=False) -> str:
