@@ -36,7 +36,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
     conformity-migration configure
     ```
 
-8) If you have AWS accounts, you have the option to use this CLI for updating your ExternalId:
+8) If you have AWS accounts, you have the option to use this CLI for updating your `ExternalId`:
    ```
    conformity-migration-aws generate-csv <CSV_FILE>
    ```
@@ -55,7 +55,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
     ```
     conformity-migration run
     ```
-    If you already updated your AWS accounts' ExternalId beforehand as in step #8, then you can add this
+    If you already updated your AWS accounts' `ExternalId` beforehand as in step 8, then you can add this
     option below so it will stop prompting you to update your ExternalId manually:
     ```
     conformity-migration run --skip-aws-prompt
@@ -65,7 +65,8 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 ## Migration support
 ### Cloud Types
 - [X] AWS account
-  - **Note:** To grant access to CloudOne Conformity, user has to manually edit the `ExternalID` parameter of CloudConformity stack of his/her AWS account.
+  - **Note:** To grant access to CloudOne Conformity, user has to update the `ExternalId` parameter of CloudConformity stack of his/her AWS account. This can be done either manually or using the CLI `conformity-migration-aws` which is part of the conformity-migration-tool package.
+
 - [X] Azure account
   - **Note:** User needs to specify App Registration Key so the tool can add the Active Directory to Conformity
 - [ ] GCP account
