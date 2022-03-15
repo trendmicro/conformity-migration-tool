@@ -97,7 +97,7 @@ def generate_csv(csv_file: str):
     "--external-id",
     type=str,
     required=False,
-    help="New value for the Stack paramater ExternalID",
+    help="New value for the Stack paramater ExternalID. If not specified, it will use the ExternalId from Cloud One Conformity.",
 )
 @click.option(
     "--csv-file",
@@ -168,7 +168,9 @@ def update_stack(
     # region = ctx.obj["region"]
     # profile = ctx.obj["profile"]
     if not external_id:
+        print("Retrieving ExternalId from Cloud One Conformity")
         external_id = c1_conformity_api().get_organisation_external_id()
+        print(f"ExternalId: {external_id}")
 
     proc_count = 1
     accts: Iterable[AccountStackInfo]
@@ -383,6 +385,7 @@ def wait_for_update_stack(
             time.sleep(check_interval_in_secs)
             continue
         reason = stack.get("StackStatusReason", "")
+        reason = f"({status}) {reason}"
         if status in {"UPDATE_COMPLETE", "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS"}:
             is_success = True
             break
