@@ -149,6 +149,7 @@ def legacy_conformity_api() -> LegacyConformityAPI:
     base_url = user_conf["LEGACY_CONFORMITY"]["API_BASE_URL"]
 
     api = DefaultConformityAPI(api_key=api_key, base_url=base_url, http=_legacy_http())
+    api = WorkaroundFixConformityAPI(api)
     api = LegacyConformityAPI(api)
     return api
 
