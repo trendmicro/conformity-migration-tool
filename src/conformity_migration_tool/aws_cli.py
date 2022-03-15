@@ -383,7 +383,7 @@ def wait_for_update_stack(
             time.sleep(check_interval_in_secs)
             continue
         reason = stack.get("StackStatusReason", "")
-        if status == "UPDATE_COMPLETE":
+        if status in {"UPDATE_COMPLETE", "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS"}:
             is_success = True
             break
         else:
