@@ -35,7 +35,7 @@ def generate_csv(csv_file: str):
     print(f"Generating CSV: {csv_file}")
     legacy_api = legacy_conformity_api()
     accts = [acct for acct in legacy_api.list_accounts() if acct.cloud_type == "aws"]
-    with open(csv_file, mode="w") as fh:
+    with open(csv_file, newline="", mode="w") as fh:
         csvw = csv.DictWriter(
             fh,
             fieldnames=[
@@ -275,7 +275,7 @@ def _fill_acct_with_defaults(
 
 
 def read_csv_file(csv_file: str) -> Iterable[AccountStackInfo]:
-    with open(csv_file, mode="r") as fh:
+    with open(csv_file, newline="", mode="r") as fh:
         csvr = csv.DictReader(fh, dialect="excel")
         for rec in csvr:
             acct = AccountStackInfo(
