@@ -119,19 +119,33 @@ def _http_adapter() -> BaseAdapter:
     return adapter
 
 
-def _legacy_http() -> Session:
-    sess = Session()
-    adapter = _http_adapter()
-    vcr_file = os.getenv("VCR_FILE")
+def _vcr_adapter(
+    adapter: BaseAdapter,
+    vcr_file: str,
+    vcr_mode: str,
+    fake_api_key: str,
+    decode_compressed_response=False,
+) -> BaseAdapter:
     if vcr_file:
-        vcr_mode = os.getenv("VCR_MODE", "none")
-        fake_api_key = "fake-api-key-for-legacy_conformity"
         vcr = VCR(
             record_mode=vcr_mode,
             match_on=("method", "scheme", "host", "port", "path", "query", "body"),
             filter_headers=[("Authorization", f"ApiKey {fake_api_key}")],
+            decode_compressed_response=True,
         )
         adapter = VcrHTTPAdapter(adapter=adapter, vcr=vcr, vcr_file=vcr_file)
+    return adapter
+
+
+def _legacy_http() -> Session:
+    sess = Session()
+    adapter = _http_adapter()
+    adapter = _vcr_adapter(
+        adapter=adapter,
+        vcr_file=os.getenv("LEG_VCR_FILE", ""),
+        vcr_mode=os.getenv("LEG_VCR_MODE", "none"),
+        fake_api_key="fake-api-key-for-legacy_conformity",
+    )
     sess.mount("https://", adapter=adapter)
     return sess
 
@@ -139,6 +153,12 @@ def _legacy_http() -> Session:
 def _c1_http() -> Session:
     sess = Session()
     adapter = _http_adapter()
+    adapter = _vcr_adapter(
+        adapter=adapter,
+        vcr_file=os.getenv("C1_VCR_FILE", ""),
+        vcr_mode=os.getenv("C1_VCR_MODE", "none"),
+        fake_api_key="fake-api-key-for-c1_conformity",
+    )
     sess.mount("https://", adapter=adapter)
     return sess
 
