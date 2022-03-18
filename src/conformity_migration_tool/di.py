@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -62,6 +63,28 @@ def user_config() -> Dict[str, Any]:
     if not path.exists():
         ask_user_to_run_configure()
     return _load_yaml_config(path)
+
+
+class FakeErrorHTTPAdapter(BaseAdapter):
+    def __init__(self, adapter: BaseAdapter):
+        self._adapter = adapter
+
+    def _fake_error(self, resp: Response):
+        req = resp.request
+        if req.method == "GET":
+            return
+        is_error = random.choice((True, False))
+        if is_error:
+            resp.status_code = 499
+            resp.reason = "Fake Error :-)"
+
+    def send(self, *args, **kwargs) -> Response:
+        resp = self._adapter.send(*args, **kwargs)
+        self._fake_error(resp)
+        return resp
+
+    def close(self) -> None:
+        return self._adapter.close()
 
 
 class TimeoutHTTPAdapter(BaseAdapter):
@@ -159,6 +182,8 @@ def _c1_http() -> Session:
         vcr_mode=os.getenv("C1_VCR_MODE", "none"),
         fake_api_key="fake-api-key-for-c1_conformity",
     )
+    if str2bool(os.getenv("FAKE_C1_HTTP_ERROR", "False")):
+        adapter = FakeErrorHTTPAdapter(adapter=adapter)
     sess.mount("https://", adapter=adapter)
     return sess
 
@@ -183,3 +208,10 @@ def c1_conformity_api() -> CloudOneConformityAPI:
     api = WorkaroundFixConformityAPI(api)
     api = CloudOneConformityAPI(api)
     return api
+
+
+@lru_cache(maxsize=1)
+def logger() -> logging.Logger:
+    logger = logging.getLogger("app")
+    # logger.addHandler(logging.StreamHandler(stream=sys.stdout))
+    return logger
