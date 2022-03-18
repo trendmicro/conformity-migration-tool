@@ -1,4 +1,3 @@
-import json
 import os
 import time
 from datetime import datetime, timezone
@@ -147,7 +146,7 @@ def empty_c1_conformity(c1_api: CloudOneConformityAPI):
 
 
 def prompt_initialize_organisation_profile():
-    print(
+    log.info(
         """The Organisation Profile of Cloud One Conformity must be manually initialized first before
 this tool can migrate the Organisation Profile settings. Follow these steps to initialize it:
     1. Login to your Cloud One account.
@@ -174,18 +173,17 @@ def run_migration(legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
 
     exec_migration_func(lambda: add_managed_groups(legacy_api, c1_api))
 
-    print("Adding all cloud accounts", flush=True)
+    log.info("Adding all cloud accounts", flush=True)
     cloud_accts_to_migrate = exec_migration_func(
         lambda: add_cloud_accounts(legacy_api=legacy_api, c1_api=c1_api)
     )
     if cloud_accts_to_migrate is None:
         cloud_accts_to_migrate = dict()
-    print(f"cloud_accts_to_migrate: {json.dumps(cloud_accts_to_migrate, indent=4)}")
 
-    print("Retrieving Legacy Conformity Users", flush=True)
+    log.info("Retrieving Legacy Conformity Users", flush=True)
     legacy_users = legacy_api.get_all_users()
 
-    print("Retrieving CloudOne Conformity Users", flush=True)
+    log.info("Retrieving CloudOne Conformity Users", flush=True)
     c1_users = c1_api.get_all_users()
 
     users_to_invite = set(legacy_users).difference(set(c1_users))
@@ -197,7 +195,7 @@ def run_migration(legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
         verify_users_mobile_numbers(users_to_verify_mobile)
 
     if any([users_to_invite, users_to_verify_mobile]):
-        print("Retrieving updated list of CloudOne Conformity Users", flush=True)
+        log.info("Retrieving updated list of CloudOne Conformity Users", flush=True)
         c1_users = c1_api.get_all_users()
 
     exec_migration_func(lambda: create_user_defined_groups(legacy_api, c1_api))
@@ -210,7 +208,7 @@ def run_migration(legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
 
     c1_org_id = c1_api.get_organisation_id()
 
-    print("Copying communication channel settings (organisation-level)", flush=True)
+    log.info("Copying communication channel settings (organisation-level)", flush=True)
     exec_migration_func(
         lambda: copy_communication_channel_settings(
             legacy_api=legacy_api,
@@ -236,7 +234,7 @@ def run_migration(legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
                     c1_org_id=c1_org_id,
                 )
             )
-            print()
+            log.info("")
 
 
 def migrate_all_groups_configs(
@@ -245,14 +243,14 @@ def migrate_all_groups_configs(
     c1_group_id_map: Dict[Group, str] = {g: g.group_id for g in c1_api.list_groups()}
 
     for legacy_group in legacy_api.list_groups():
-        print(
+        log.info(
             f"Migrating group configurations for Group={legacy_group.name}, Tags={legacy_group.tags}",
             flush=True,
         )
         legacy_group_id = legacy_group.group_id
         c1_group_id = c1_group_id_map.get(legacy_group)
         if not c1_group_id:
-            print(
+            log.warn(
                 f"Can't find corresponding CloudOne group for: Group={legacy_group.name}, Tags={legacy_group.tags}. Cannot migrate it's configurations."
             )
             continue
@@ -269,7 +267,7 @@ def migrate_all_groups_configs(
 def update_organisation_profile(
     legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
 ):
-    print("Copying Organisation Profile", flush=True)
+    log.info("Copying Organisation Profile", flush=True)
     legacy_org_profile = legacy_api.get_organisation_profile(include_rule_settings=True)
     c1_org_profile = c1_api.get_organisation_profile(include_rule_settings=True)
 
@@ -300,10 +298,10 @@ def add_cloud_accounts(
             cloud_type=cloud_type, legacy_api=legacy_api, c1_api=c1_api
         )
         if acct_adder is None:
-            print(f"Does not support {cloud_type.upper()} yet! Skipping it.")
+            log.info(f"Does not support {cloud_type.upper()} yet! Skipping it.")
             continue
 
-        print(f"Adding {cloud_type.upper()} accounts to CloudOne Conformity:")
+        log.info(f"Adding {cloud_type.upper()} accounts to CloudOne Conformity:")
         c1_cloud_type_accounts = c1_cloud_type_accts_map.get(cloud_type, [])
 
         accts_to_migrate: Dict[str, str] = dict()
@@ -315,7 +313,7 @@ def add_cloud_accounts(
             )
             env_suffix = acct_env_suffix(acct.environment)
             if exists:
-                print(
+                log.info(
                     f"Account {acct.name}{env_suffix} already exists in CloudOne Conformity!"
                 )
                 if not (
@@ -326,7 +324,7 @@ def add_cloud_accounts(
                 ):
                     continue
             else:
-                print(f" --> Account: {acct.name}{env_suffix}")
+                log.info(f" --> Account: {acct.name}{env_suffix}")
                 c1_acct_id = exec_migration_func(
                     lambda: acct_adder.account_add(acct=acct)  # type: ignore
                 )
@@ -341,7 +339,7 @@ def add_cloud_accounts(
 def create_custom_profile(
     profile: Profile, legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
 ):
-    print(f"  --> Profile: {profile.name}", flush=True)
+    log.info(f"  --> Profile: {profile.name}", flush=True)
     profile_with_rules = legacy_api.get_profile(
         profile_id=profile.profile_id, include_rule_settings=True
     )
@@ -351,16 +349,18 @@ def create_custom_profile(
 def copy_custom_profiles(
     legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
 ):
-    print("Copying Custom Profiles", flush=True)
+    log.info("Copying Custom Profiles", flush=True)
     legacy_profiles = legacy_api.get_custom_profiles()
     c1_profiles = c1_api.get_custom_profiles()
 
     legacy_profiles_set = set(legacy_profiles)
     c1_profiles_to_replace = [p for p in c1_profiles if p in legacy_profiles_set]
     if c1_profiles_to_replace:
-        print("Found following custom profiles that will be replaced during migration:")
+        log.info(
+            "Found following custom profiles that will be replaced during migration:"
+        )
         for c1_profile in c1_profiles_to_replace:
-            print(f"  - Profile: {c1_profile.name}")
+            log.info(f"  - Profile: {c1_profile.name}")
         cont = ask_confirmation_or_auto_overwrite(
             "Continue migrating custom profiles?", ask_if_sure=True
         )
@@ -368,7 +368,7 @@ def copy_custom_profiles(
             return
 
     for profile in c1_profiles_to_replace:
-        # print(f" --> Deleting CloudOne profile: {profile.name}")
+        # log.info(f" --> Deleting CloudOne profile: {profile.name}")
         c1_api.delete_profile(profile_id=profile.profile_id)
 
     for profile in legacy_profiles:
@@ -390,11 +390,11 @@ def check_existing_c1_report_configs(
     legacy_rconf_set = set(legacy_report_configs)
     c1_rconf_to_replace = [r for r in c1_report_configs if r in legacy_rconf_set]
     if c1_rconf_to_replace:
-        print(
+        log.info(
             f"Found following {rconf_type} Report Configs that will be replaced during migration:"
         )
         for c1_rconf in c1_rconf_to_replace:
-            print(f"  - Report Config: {c1_rconf.title}")
+            log.info(f"  - Report Config: {c1_rconf.title}")
         cont = ask_confirmation_or_auto_overwrite(
             f"Continue migrating {rconf_type} Report Configs?", ask_if_sure=True
         )
@@ -402,7 +402,7 @@ def check_existing_c1_report_configs(
             return False
 
     for rconf in c1_rconf_to_replace:
-        # print(f" --> Deleting CloudOne {rconf_type} Report Config: {rconf.title}")
+        # log.info(f" --> Deleting CloudOne {rconf_type} Report Config: {rconf.title}")
         c1_api.delete_report_config(report_conf_id=rconf.report_config_id)
 
     return True
@@ -415,7 +415,7 @@ def copy_account_report_configs(
     c1_acct_id: str,
 ):
     rconf_type = "Account"
-    print(f"  --> Copying {rconf_type} Report Configs", flush=True)
+    log.info(f"  --> Copying {rconf_type} Report Configs", flush=True)
     legacy_report_configs = legacy_api.list_account_report_configs(
         acct_id=legacy_acct_id
     )
@@ -431,7 +431,7 @@ def copy_account_report_configs(
         return
 
     for report_config in legacy_report_configs:
-        print(f"    --> Report Config: {report_config.title}")
+        log.info(f"    --> Report Config: {report_config.title}")
         exec_migration_func(
             lambda: c1_api.create_account_report_config(
                 report_conf=report_config.configuration, acct_id=c1_acct_id
@@ -446,7 +446,7 @@ def copy_group_report_configs(
     c1_group_id: str,
 ):
     rconf_type = "Group"
-    print(f" --> Copying {rconf_type} Report Configs", flush=True)
+    log.info(f" --> Copying {rconf_type} Report Configs", flush=True)
     legacy_report_configs = legacy_api.list_group_report_configs(
         group_id=legacy_group_id
     )
@@ -462,7 +462,7 @@ def copy_group_report_configs(
         return
 
     for report_config in legacy_report_configs:
-        print(f"    --> Report Config: {report_config.title}")
+        log.info(f"    --> Report Config: {report_config.title}")
         exec_migration_func(
             lambda: c1_api.create_group_report_config(
                 report_conf=report_config.configuration, group_id=c1_group_id
@@ -475,7 +475,7 @@ def copy_organisation_report_configs(
     c1_api: CloudOneConformityAPI,
 ):
     rconf_type = "Organisation"
-    print(f"Copying {rconf_type} Report Configs", flush=True)
+    log.info(f"Copying {rconf_type} Report Configs", flush=True)
     legacy_report_configs = legacy_api.list_organisation_report_configs()
     c1_report_configs = c1_api.list_organisation_report_configs()
 
@@ -489,7 +489,7 @@ def copy_organisation_report_configs(
         return
 
     for report_config in legacy_report_configs:
-        print(f"  --> Report Config: {report_config.title}")
+        log.info(f"  --> Report Config: {report_config.title}")
         exec_migration_func(
             lambda: c1_api.create_organisation_report_config(
                 report_conf=report_config.configuration
@@ -500,7 +500,7 @@ def copy_organisation_report_configs(
 def create_user_defined_groups(
     legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
 ):
-    print("Creating groups")
+    log.info("Creating groups")
     legacy_groups = legacy_api.list_groups(
         include_group_types=[Group.GROUP_TYPE_USER_DEFINED]
     )
@@ -509,17 +509,16 @@ def create_user_defined_groups(
     )
 
     for group in legacy_groups:
-        print(f" --> Group: {group.name}, Tags: {group.tags}", end="", flush=True)
+        log.info(f" --> Group: {group.name}, Tags: {group.tags}", end="", flush=True)
         if group in c1_groups:
-            print(" - Already exists! Skipping it.")
+            log.info(" - Already exists! Skipping it.")
             continue
         exec_migration_func(
             lambda: c1_api.create_group(name=group.name, tags=group.tags)
         )
-        print(" - Done")
 
     if not legacy_groups:
-        print(" --> No group found.")
+        log.info(" --> No group found.")
 
 
 def add_azure_group(mg: Group, c1_api: CloudOneConformityAPI):
@@ -549,14 +548,14 @@ def add_managed_groups(legacy_api: LegacyConformityAPI, c1_api: CloudOneConformi
 
     for mg in legacy_managed_groups:
         if mg in c1_managed_groups_set:
-            # print(f"Managed Group {mg.name} ({mg.cloud_type.upper()}) already exists!")
+            # log.info(f"Managed Group {mg.name} ({mg.cloud_type.upper()}) already exists!")
             continue
         if mg.cloud_type == "azure":
             exec_migration_func(lambda: add_azure_group(mg=mg, c1_api=c1_api))
 
 
 def prompt_azure_app_client_id(directory_name, directory_id, app_client_id) -> str:
-    print(
+    log.info(
         f"""
 Please enter the App registration key for the following Active Directory:
 If you lost the key, you may generate a new Client Secret on your Azure App Registration.
@@ -578,7 +577,7 @@ def _filter_users_with_verified_mobile(
     unverified_user_ids = c1_user_ids_set.difference(mobile_verified_c1_users)
     for user_id in unverified_user_ids:
         email = c1_user_id_email_map.get(user_id, user_id)
-        print(
+        log.warn(
             f"User {email} doesn't have a mobile number verified. Excluding from SMS notification"
         )
 
@@ -596,14 +595,14 @@ def _legacy_user_ids_to_c1_user_ids(
     for legacy_user_id in legacy_user_ids:
         email = legacy_user_id_email_map.get(legacy_user_id)
         if email is None:
-            print(
+            log.warn(
                 f"Cannot find email of Legacy Conformity user with an ID of: {legacy_user_id}. Excluding user from {channel} notification."
             )
             continue
 
         c1_user_id = c1_email_user_id_map.get(email)
         if c1_user_id is None:
-            print(
+            log.warn(
                 f"Cannot find corresponding user in CloudOne Conformity: {email}. Excluding user from {channel} notification."
             )
             continue
@@ -679,11 +678,11 @@ def migrate_account_configurations(
     environment = legacy_acct_details.environment
     cloud_type = legacy_acct_details.cloud_type
     env_suffix = acct_env_suffix(environment)
-    print(
+    log.info(
         f"Migrating account configurations for: {name}{env_suffix} [{cloud_type.upper()}]:"
     )
 
-    print("  --> Updating account tags", flush=True)
+    log.info("  --> Updating account tags", flush=True)
     exec_migration_func(
         lambda: c1_api.update_account(
             acct_id=c1_acct_id,
@@ -693,7 +692,7 @@ def migrate_account_configurations(
         )
     )
 
-    print("  --> Copying account bot settings", flush=True)
+    log.info("  --> Copying account bot settings", flush=True)
     # bot_settings = legacy_api.get_account_bot_settings(acct_id=legacy_acct_id)
     bot_settings = legacy_acct_details.bot_settings
     if bot_settings:
@@ -705,7 +704,7 @@ def migrate_account_configurations(
             )
         )
 
-    print("  --> Copying account rules settings:", flush=True)
+    log.info("  --> Copying account rules settings:", flush=True)
     exec_migration_func(
         lambda: copy_account_rules_settings(
             legacy_api=legacy_api,
@@ -717,7 +716,7 @@ def migrate_account_configurations(
         )
     )
 
-    print("  --> Copying communication channel settings", flush=True)
+    log.info("  --> Copying communication channel settings", flush=True)
     exec_migration_func(
         lambda: copy_communication_channel_settings(
             legacy_api=legacy_api,
@@ -740,13 +739,12 @@ def migrate_account_configurations(
     )
 
     if has_suppressed_check(legacy_api=legacy_api, acct_id=legacy_acct_id):
-        print("  --> Waiting for bot scan to finish ", end="", flush=True)
+        log.info("  --> Waiting for bot scan to finish ")
         exec_migration_func(
             lambda: wait_for_bot_scan_to_finish(c1_api=c1_api, acct_id=c1_acct_id)
         )
-        print(" - Done")
 
-        print("  --> Copying suppressed checks")
+        log.info("  --> Copying suppressed checks")
         exec_migration_func(
             lambda: copy_suppressed_checks(
                 legacy_api=legacy_api,
@@ -756,7 +754,7 @@ def migrate_account_configurations(
             )
         )
     else:
-        print("  --> No suppressed check found to migrate")
+        log.info("  --> No suppressed check found to migrate")
 
 
 def copy_account_rule_setting(
@@ -768,7 +766,7 @@ def copy_account_rule_setting(
     user_map: dict,
 ):
     rule_id = rule.rule_id
-    print(
+    log.info(
         f"    --> Rule: {rule_id} ({'enabled' if rule.enabled else 'disabled'})",
         flush=True,
     )
@@ -864,7 +862,6 @@ def exec_migration_func(migration_func: Callable) -> Any:
 
 def wait_for_bot_scan_to_finish(c1_api: CloudOneConformityAPI, acct_id: str):
     while not c1_api.is_bot_scan_done(acct_id=acct_id):
-        print(".", end="", flush=True)
         time.sleep(app_config()["BOT_SCAN_CHECK_INTERVAL_IN_SECS"])
         continue
 
@@ -880,7 +877,7 @@ def copy_suppressed_check(
     c1_acct_id: str,
     legacy_check: Check,
 ):
-    print(
+    log.info(
         f"    --> {legacy_check.rule_id}|{legacy_check.region}|{legacy_check.resource_name}|{legacy_check.resource}",
         flush=True,
     )
@@ -904,7 +901,7 @@ def copy_suppressed_check(
     if not note_msg:
         note_msg = "[Migration tool: No note found from the source Check]"
     note_msg = truncate_txt_to_length(txt=note_msg, length=200, truncated_suffix="..")
-    # print(f"Note: {note_msg}")
+    # log.info(f"Note: {note_msg}")
     c1_api.suppress_check(
         check_id=c1_check.check_id,
         suppressed_until=legacy_check.suppressed_until,
@@ -931,7 +928,7 @@ def copy_suppressed_checks(
 
 
 def show_instructions_for_missing_check(check: Check):
-    print(
+    log.warn(
         f"""
     Can't find the corresponding check in CloudOne. Please manually suppress the check below or try re-running this tool.
         RuleID: {check.rule_id}
@@ -943,7 +940,7 @@ def show_instructions_for_missing_check(check: Check):
 
 
 def verify_users_mobile_numbers(users_to_verify_mobile: Iterable[User]):
-    print(
+    log.info(
         """
 Please have the following users in your CloudOne Account to have their mobile
 numbers verified. If they are one of the recipients for SMS notifications,
@@ -951,15 +948,15 @@ then it is important to do this now before we proceed with migration:
 """
     )
     for user in users_to_verify_mobile:
-        print(
+        log.info(
             f" --> {user.first_name} {user.last_name}; Email={user.email}; Mobile={user.mobile_number}"
         )
-    print()
+    log.info("")
     ask_when_mobile_verification__done()
 
 
 def invite_users(users_to_invite: Iterable[User]):
-    print(
+    log.info(
         """
 Please invite the following users to your CloudOne Account.
 If they are one of the recipients for your communication channel,
@@ -967,8 +964,8 @@ then it is important to add them now before we proceed with migration:
 """
     )
     for user in users_to_invite:
-        print(f" --> {user.first_name} {user.last_name}; Email={user.email}")
-    print()
+        log.info(f" --> {user.first_name} {user.last_name}; Email={user.email}")
+    log.info("")
     ask_when_user_invite_done()
 
 
@@ -1057,7 +1054,7 @@ def ask_input(msg: str, mask_input=False) -> str:
 
 def pretty_print_com_settings(com_settings):
     for s in com_settings:
-        print(s)
+        log.debug(s)
 
 
 @click.group(
@@ -1110,8 +1107,8 @@ def run(skip_aws_prompt: bool, overwrite_all: bool, skip_migration_failures: boo
     try:
         run_migration(legacy_api=legacy_conformity_api(), c1_api=c1_conformity_api())
     except ConformityError as e:
-        print(e)
-        print(e.details)
+        log.error(e)
+        log.error(e.details)
         # raise e
 
 

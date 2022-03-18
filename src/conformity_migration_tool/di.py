@@ -3,6 +3,7 @@ import os
 import random
 import sys
 from functools import lru_cache
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Dict
 
@@ -20,11 +21,6 @@ from conformity_migration.conformity_api import (
 )
 
 from .utils import str2bool
-
-log_backoff = str2bool(os.getenv("LOG_BACKOFF", "False"))
-if log_backoff:
-    logging.getLogger("backoff").addHandler(logging.StreamHandler())
-
 
 script_dirpath = Path(__file__).parent
 
@@ -210,8 +206,105 @@ def c1_conformity_api() -> CloudOneConformityAPI:
     return api
 
 
+class Logger:
+    def info(self, msg: object, *args, **kwargs) -> None:
+        ...
+
+    def warn(self, msg: object, *args, **kwargs) -> None:
+        ...
+
+    def debug(self, msg: object, *args, **kwargs) -> None:
+        ...
+
+    def error(self, msg: object, *args, **kwargs) -> None:
+        ...
+
+    def exception(self, msg: object, *args, **kwargs) -> None:
+        ...
+
+
+class AppLogger(Logger):
+    def __init__(self, logger: logging.Logger) -> None:
+        self.logger = logger
+
+    def _clean_kwargs(self, kwargs: dict):
+        kwargs.pop("end", None)
+        kwargs.pop("flush", None)
+
+    def info(self, msg: object, *args, **kwargs) -> None:
+        self._clean_kwargs(kwargs)
+        return self.logger.info(msg, *args, **kwargs)
+
+    def warn(self, msg: object, *args, **kwargs) -> None:
+        self._clean_kwargs(kwargs)
+        return self.logger.warn(msg, *args, **kwargs)
+
+    def debug(self, msg: object, *args, **kwargs) -> None:
+        self._clean_kwargs(kwargs)
+        return self.logger.debug(msg, *args, **kwargs)
+
+    def error(self, msg: object, *args, **kwargs) -> None:
+        self._clean_kwargs(kwargs)
+        return self.logger.error(msg, *args, **kwargs)
+
+    def exception(self, msg: object, *args, **kwargs) -> None:
+        self._clean_kwargs(kwargs)
+        return self.logger.exception(msg, *args, **kwargs)
+
+
+class NoStrackTraceExceptionFormatter(logging.Formatter):
+    def formatException(self, exc_info) -> str:
+        return str(exc_info[1])
+
+    def format(self, record: logging.LogRecord):
+        # clears cached exc_text formatted by other Formatter.formatException(record.exc_info)
+        record.exc_text = ""
+        return super().format(record=record)
+
+
+class WithStrackTraceExceptionFormatter(logging.Formatter):
+    def formatException(self, exc_info) -> str:
+        return super().formatException(exc_info)
+
+    def format(self, record: logging.LogRecord):
+        # clears cached exc_text formatted by other Formatter.formatException(record.exc_info)
+        record.exc_text = ""
+        return super().format(record=record)
+
+
 @lru_cache(maxsize=1)
-def logger() -> logging.Logger:
+def logger() -> Logger:
     logger = logging.getLogger("app")
-    # logger.addHandler(logging.StreamHandler(stream=sys.stdout))
-    return logger
+    logger.setLevel(logging.INFO)
+
+    ch = logging.StreamHandler(stream=sys.stdout)
+    ch.setLevel(logging.INFO)
+    # cfmt = logging.Formatter(fmt="%(message)s")
+    ch_fmt = NoStrackTraceExceptionFormatter(fmt="%(message)s")
+    ch.setFormatter(ch_fmt)
+    logger.addHandler(ch)
+
+    # fh_fmt = logging.Formatter(fmt="[%(asctime)s] %(levelname)s %(message)s")
+    fh_fmt = WithStrackTraceExceptionFormatter(
+        fmt="[%(asctime)s] %(levelname)s %(message)s"
+    )
+
+    info_fh = RotatingFileHandler(
+        filename="conformity-migration.log", maxBytes=1024**2, backupCount=4
+    )
+    info_fh.setLevel(logging.INFO)
+    info_fh.setFormatter(fmt=fh_fmt)
+    logger.addHandler(info_fh)
+
+    err_fh = RotatingFileHandler(
+        filename="conformity-migration-error.log", maxBytes=1024**2, backupCount=4
+    )
+    err_fh.setLevel(logging.ERROR)
+    err_fh.setFormatter(fmt=fh_fmt)
+    logger.addHandler(err_fh)
+
+    log_backoff = str2bool(os.getenv("LOG_BACKOFF", "False"))
+    if log_backoff:
+        logging.getLogger("backoff").addHandler(info_fh)
+
+    return AppLogger(logger=logger)
