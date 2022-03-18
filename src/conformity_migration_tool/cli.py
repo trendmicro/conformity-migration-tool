@@ -27,6 +27,7 @@ from conformity_migration.models import (
 
 from . import __version__ as tool_version
 from .di import app_config, c1_conformity_api, legacy_conformity_api, user_config_path
+from .utils import str2bool
 
 
 def create_user_config(user_conf_path: Path):
@@ -252,7 +253,7 @@ def update_organisation_profile(
     c1_org_profile = c1_api.get_organisation_profile(include_rule_settings=True)
 
     if c1_org_profile.included_rules:
-        overwrite = ask_confirmation(
+        overwrite = ask_confirmation_or_auto_overwrite(
             "CloudOne Organisation Profile has configured rules in it. Do you want to overwrite it?",
             ask_if_sure=True,
         )
@@ -298,7 +299,7 @@ def add_cloud_accounts(
                     f"Account {acct.name}{env_suffix} already exists in CloudOne Conformity!"
                 )
                 if not (
-                    ask_confirmation(
+                    ask_confirmation_or_auto_overwrite(
                         "Do you want to migrate configurations for this account (will overwrite existing ones)?",
                         ask_if_sure=True,
                     )
@@ -326,7 +327,9 @@ def copy_custom_profiles(
         print("Found following custom profiles that will be replaced during migration:")
         for c1_profile in c1_profiles_to_replace:
             print(f"  - Profile: {c1_profile.name}")
-        cont = ask_confirmation("Continue migrating custom profiles?", ask_if_sure=True)
+        cont = ask_confirmation_or_auto_overwrite(
+            "Continue migrating custom profiles?", ask_if_sure=True
+        )
         if not cont:
             return
 
@@ -358,7 +361,7 @@ def check_existing_c1_report_configs(
         )
         for c1_rconf in c1_rconf_to_replace:
             print(f"  - Report Config: {c1_rconf.title}")
-        cont = ask_confirmation(
+        cont = ask_confirmation_or_auto_overwrite(
             f"Continue migrating {rconf_type} Report Configs?", ask_if_sure=True
         )
         if not cont:
@@ -864,6 +867,15 @@ then it is important to add them now before we proceed with migration:
     ask_when_user_invite_done()
 
 
+def ask_confirmation_or_auto_overwrite(
+    msg: str, default=False, ask_if_sure=False
+) -> bool:
+    if str2bool(os.getenv("C1_CONFORMITY_OVERWRITE_ALL", "False")):
+        return True
+
+    return ask_confirmation(msg=msg, default=default, ask_if_sure=ask_if_sure)
+
+
 def ask_confirmation(msg: str, default=False, ask_if_sure=False) -> bool:
     questions = [
         {
@@ -966,8 +978,18 @@ def configure():
     default=False,
     help="Skips prompting for manually edit AWS Conformity stack",
 )
-def run(skip_aws_prompt: bool):
+@click.option(
+    "--overwrite-all",
+    is_flag=True,
+    envvar="C1_CONFORMITY_OVERWRITE_ALL",
+    show_envvar=True,
+    required=False,
+    default=False,
+    help="Always overwrites Cloud One Conformity configurations. This prevents asking user for confirmation.",
+)
+def run(skip_aws_prompt: bool, overwrite_all: bool):
     os.environ["SKIP_AWS_PROMPT"] = "True" if skip_aws_prompt else "False"
+    os.environ["C1_CONFORMITY_OVERWRITE_ALL"] = "True" if overwrite_all else "False"
     try:
         run_migration(legacy_api=legacy_conformity_api(), c1_api=c1_conformity_api())
     except ConformityError as e:
