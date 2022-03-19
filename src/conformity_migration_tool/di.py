@@ -20,6 +20,12 @@ from conformity_migration.conformity_api import (
     WorkaroundFixConformityAPI,
 )
 
+from .logger import (
+    AppLogger,
+    Logger,
+    NoStrackTraceExceptionFormatter,
+    WithStrackTraceExceptionFormatter,
+)
 from .utils import str2bool
 
 script_dirpath = Path(__file__).parent
@@ -59,6 +65,35 @@ def user_config() -> Dict[str, Any]:
     if not path.exists():
         ask_user_to_run_configure()
     return _load_yaml_config(path)
+
+
+class LoggerHTTPAdapter(BaseAdapter):
+    def __init__(self, adapter: BaseAdapter, logger=Logger):
+        self._adapter = adapter
+        self._log = logger
+
+    def _build_req_resp_txt(self, resp: Response):
+        req = resp.request
+        req_body = str(req.body) if req.body else ""
+        return f"""[Request]
+{req.method} {req.url}
+
+{req_body}
+[Response]
+{resp.status_code} {resp.reason}
+Content-Type: {resp.headers['Content-Type']}
+
+{resp.text}"""
+
+    def send(self, *args, **kwargs) -> Response:
+        resp = self._adapter.send(*args, **kwargs)
+        if not resp.ok:
+            req_resp = self._build_req_resp_txt(resp)
+            self._log.error(req_resp, file_only=True)
+        return resp
+
+    def close(self) -> None:
+        return self._adapter.close()
 
 
 class FakeErrorHTTPAdapter(BaseAdapter):
@@ -135,6 +170,9 @@ def _http_adapter() -> BaseAdapter:
         conn_timeout=app_conf["API_CONNECTION_TIMEOUT"],
         read_timeout=app_conf["API_READ_TIMEOUT"],
     )
+
+    adapter = LoggerHTTPAdapter(adapter=adapter, logger=logger())
+
     return adapter
 
 
@@ -206,72 +244,6 @@ def c1_conformity_api() -> CloudOneConformityAPI:
     return api
 
 
-class Logger:
-    def info(self, msg: object, *args, **kwargs) -> None:
-        ...
-
-    def warn(self, msg: object, *args, **kwargs) -> None:
-        ...
-
-    def debug(self, msg: object, *args, **kwargs) -> None:
-        ...
-
-    def error(self, msg: object, *args, **kwargs) -> None:
-        ...
-
-    def exception(self, msg: object, *args, **kwargs) -> None:
-        ...
-
-
-class AppLogger(Logger):
-    def __init__(self, logger: logging.Logger) -> None:
-        self.logger = logger
-
-    def _clean_kwargs(self, kwargs: dict):
-        kwargs.pop("end", None)
-        kwargs.pop("flush", None)
-
-    def info(self, msg: object, *args, **kwargs) -> None:
-        self._clean_kwargs(kwargs)
-        return self.logger.info(msg, *args, **kwargs)
-
-    def warn(self, msg: object, *args, **kwargs) -> None:
-        self._clean_kwargs(kwargs)
-        return self.logger.warn(msg, *args, **kwargs)
-
-    def debug(self, msg: object, *args, **kwargs) -> None:
-        self._clean_kwargs(kwargs)
-        return self.logger.debug(msg, *args, **kwargs)
-
-    def error(self, msg: object, *args, **kwargs) -> None:
-        self._clean_kwargs(kwargs)
-        return self.logger.error(msg, *args, **kwargs)
-
-    def exception(self, msg: object, *args, **kwargs) -> None:
-        self._clean_kwargs(kwargs)
-        return self.logger.exception(msg, *args, **kwargs)
-
-
-class NoStrackTraceExceptionFormatter(logging.Formatter):
-    def formatException(self, exc_info) -> str:
-        return str(exc_info[1])
-
-    def format(self, record: logging.LogRecord):
-        # clears cached exc_text formatted by other Formatter.formatException(record.exc_info)
-        record.exc_text = ""
-        return super().format(record=record)
-
-
-class WithStrackTraceExceptionFormatter(logging.Formatter):
-    def formatException(self, exc_info) -> str:
-        return super().formatException(exc_info)
-
-    def format(self, record: logging.LogRecord):
-        # clears cached exc_text formatted by other Formatter.formatException(record.exc_info)
-        record.exc_text = ""
-        return super().format(record=record)
-
-
 @lru_cache(maxsize=1)
 def logger() -> Logger:
     logger = logging.getLogger("app")
@@ -279,22 +251,21 @@ def logger() -> Logger:
 
     ch = logging.StreamHandler(stream=sys.stdout)
     ch.setLevel(logging.INFO)
-    # cfmt = logging.Formatter(fmt="%(message)s")
     ch_fmt = NoStrackTraceExceptionFormatter(fmt="%(message)s")
     ch.setFormatter(ch_fmt)
+    ch.addFilter(lambda logrec: not logrec.file_only)  # type: ignore
     logger.addHandler(ch)
 
-    # fh_fmt = logging.Formatter(fmt="[%(asctime)s] %(levelname)s %(message)s")
     fh_fmt = WithStrackTraceExceptionFormatter(
         fmt="[%(asctime)s] %(levelname)s %(message)s"
     )
 
-    info_fh = RotatingFileHandler(
+    log_fh = RotatingFileHandler(
         filename="conformity-migration.log", maxBytes=1024**2, backupCount=4
     )
-    info_fh.setLevel(logging.INFO)
-    info_fh.setFormatter(fmt=fh_fmt)
-    logger.addHandler(info_fh)
+    log_fh.setLevel(logging.DEBUG)
+    log_fh.setFormatter(fmt=fh_fmt)
+    logger.addHandler(log_fh)
 
     err_fh = RotatingFileHandler(
         filename="conformity-migration-error.log", maxBytes=1024**2, backupCount=4
@@ -303,8 +274,10 @@ def logger() -> Logger:
     err_fh.setFormatter(fmt=fh_fmt)
     logger.addHandler(err_fh)
 
-    log_backoff = str2bool(os.getenv("LOG_BACKOFF", "False"))
+    log_backoff = app_config()["LOG_BACKOFF"]
     if log_backoff:
-        logging.getLogger("backoff").addHandler(info_fh)
+        backoff_logger = logging.getLogger("backoff")
+        backoff_logger.addHandler(log_fh)
+        backoff_logger.addHandler(err_fh)
 
     return AppLogger(logger=logger)
