@@ -883,7 +883,9 @@ def copy_suppressed_check(
     )
     filters: Dict[str, Any] = {
         "ruleIds": [legacy_check.rule_id],
+        "services": [legacy_check.service],
         "regions": [legacy_check.region],
+        "statuses": "FAILURE",
     }
     if legacy_check.resource:
         filters["resourceSearchMode"] = "text"

@@ -667,6 +667,31 @@ Response:
         #     print("Limit reached!")
         return limit_reached
 
+    def _check_dict_to_check_obj(self, c: dict) -> Check:
+        attrib: dict = c["attributes"]
+        ns = attrib.get("notes", [])
+        notes = [
+            Note(
+                note=n["note"],
+                created_by=n["createdBy"],
+                created_ts=n["created-date"],
+            )
+            for n in ns
+        ]
+        return Check(
+            check_id=c["id"],
+            acct_id=c["relationships"]["account"]["data"]["id"],
+            rule_id=c["relationships"]["rule"]["data"]["id"],
+            service=attrib["service"],
+            region=attrib["region"],
+            resource_name=attrib.get("resourceName", ""),
+            resource=attrib.get("resource", ""),
+            message=attrib["message"],
+            suppressed=attrib.get("suppressed"),
+            suppressed_until=attrib.get("suppressed-until"),
+            notes=notes,
+        )
+
     def get_checks(
         self, acct_id: str, filters: Optional[Dict[str, Any]] = None, limit=0
     ) -> Iterable[Check]:
@@ -692,20 +717,7 @@ Response:
             )
             data = res["data"]
             for c in data:
-                attrib: dict = c["attributes"]
-                region = attrib["region"]
-                resource_name = attrib.get("resourceName", "")
-                resource = attrib.get("resource", "")
-                yield Check(
-                    check_id=c["id"],
-                    rule_id=c["relationships"]["rule"]["data"]["id"],
-                    region=region,
-                    resource_name=resource_name,
-                    resource=resource,
-                    message=attrib["message"],
-                    suppressed=attrib.get("suppressed"),
-                    suppressed_until=attrib.get("suppressed-until"),
-                )
+                yield self._check_dict_to_check_obj(c)
                 total_items += 1
                 if self._limit_reached(limit, total_items):
                     break
@@ -757,32 +769,7 @@ Response:
         res = self._get_request(
             f"{self._base_url}/checks/{quote(check_id, safe='')}", params=params
         )
-        c = res["data"]
-        # print(json.dumps(c, indent=4))
-        attrib: dict = c["attributes"]
-        region = attrib["region"]
-        resource_name = attrib.get("resourceName", "")
-        resource = attrib.get("resource", "")
-        ns = attrib.get("notes", [])
-        notes = [
-            Note(
-                note=n["note"],
-                created_by=n["createdBy"],
-                created_ts=n["created-date"],
-            )
-            for n in ns
-        ]
-        return Check(
-            check_id=check_id,
-            rule_id=c["relationships"]["rule"]["data"]["id"],
-            region=region,
-            resource_name=resource_name,
-            resource=resource,
-            message=attrib["message"],
-            suppressed=attrib.get("suppressed"),
-            suppressed_until=attrib.get("suppressed-until"),
-            notes=notes,
-        )
+        return self._check_dict_to_check_obj(res["data"])
 
     def is_bot_scan_done(self, acct_id: str) -> bool:
         bot_status = self.get_account_details(acct_id=acct_id).bot_status

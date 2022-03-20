@@ -125,37 +125,53 @@ class Check:
     def __init__(
         self,
         check_id: str,
+        acct_id: str,
         rule_id: str,
+        service: str,
         region: str,
-        resource_name: str,
         resource: str,
+        resource_name: str,
         message: str,
         suppressed: Optional[bool],
         suppressed_until: Optional[int],
         notes: List[Note] = None,
     ) -> None:
         self.check_id = check_id
+        self.acct_id = acct_id
         self.rule_id = rule_id
+        self.service = service
         self.region = region
-        self.resource_name = resource_name
         self.resource = resource
+        self.resource_name = resource_name
         self.message = message
         self.suppressed = suppressed
         self.suppressed_until = suppressed_until
         self.notes = notes if notes is not None else []
 
     def __hash__(self) -> int:
-        return hash(f"{self.rule_id}|{self.resource_name}|{self.resource}")
+        return hash(f"{self.rule_id}|{self.resource}")
 
     def __eq__(self, other: Any) -> bool:
+        """
+        The equality check is based from how the checkId is composed according
+        to the Conformity's API documentation for Custom Check.
+        checkID = ccc:accountId:ruleId:service:region:resourceId
+
+        However, for migration purposes, accountId isn't used in this equality
+        check because the source and the destination account when migrating
+        suppressed check won't have the same accountId. To make sure the
+        comparison is accurate, comparison must only be done between two checks
+        that come from the same accounts (i.e. 2nd account is the account migrated
+        from the 1st account)
+        """
         if not isinstance(other, Check):
             return False
         other: Check = other
 
         return (
             self.rule_id == other.rule_id
+            and self.service == other.service
             and self.region == other.region
-            and self.resource_name == other.resource_name
             and self.resource == other.resource
         )
 
