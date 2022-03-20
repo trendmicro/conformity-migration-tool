@@ -1096,7 +1096,7 @@ def configure():
     show_envvar=True,
     required=False,
     default=False,
-    help="Skips prompting for manually edit AWS Conformity stack",
+    help="Will always allow migration to continue even when some configuration fails to migrate.",
 )
 def run(skip_aws_prompt: bool, overwrite_all: bool, skip_migration_failures: bool):
     os.environ["SKIP_AWS_PROMPT"] = "True" if skip_aws_prompt else "False"
