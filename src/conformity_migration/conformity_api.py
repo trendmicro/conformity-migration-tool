@@ -1,5 +1,4 @@
 import json
-from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote
 
@@ -220,6 +219,7 @@ class DefaultConformityAPI:
             "Authorization": f"ApiKey {self._api_key}",
             "Content-Type": "application/vnd.api+json",
         }
+        self._current_user = None
         self._validate_api()
         self._organisation_external_id = ""
 
@@ -296,10 +296,12 @@ Response:
                     f"Insufficient permisison. API Key must have an ADMIN privilege for: {self._base_url}"
                 )
 
-    @lru_cache(maxsize=1)
     def current_user(self) -> User:
-        res = self._get_request(f"{self._base_url}/users/whoami")
-        return self._user_dict_to_user_obj(res["data"])
+        if not self._current_user:
+            res = self._get_request(f"{self._base_url}/users/whoami")
+            user = self._user_dict_to_user_obj(res["data"])
+            self._current_user = user
+        return self._current_user
 
     def delete_account(self, acct_id: str) -> dict:
         res = self._delete_request(f"{self._base_url}/accounts/{acct_id}")
