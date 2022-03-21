@@ -24,19 +24,17 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
    source .venv/bin/activate
    ```
 
-5) Download the python distribution (.whl file) from this page's asset section: [conformity-migration-tool](../../releases/latest)
-
-6) Install the tool
+5) Install the tool
     ```
-    pip install conformity_migration_tool-<version>-py3-none-any.whl
+    pip install conformity-migration-tool
     ```
 
-7) Configure the tool
+6) Configure the tool
     ```
     conformity-migration configure
     ```
 
-8) If you have AWS accounts, you have the option to use this CLI for updating your `ExternalId`:
+7) If you have AWS accounts, you have the option to use this CLI for updating your `ExternalId`:
    ```
    conformity-migration-aws generate-csv <CSV_FILE>
    ```
@@ -51,7 +49,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
    conformity-migration-aws update-stack --help
    ```
 
-9)  Run the migration
+8)  Run the migration
     ```
     conformity-migration run
     ```
