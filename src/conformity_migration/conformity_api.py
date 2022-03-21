@@ -219,7 +219,7 @@ class DefaultConformityAPI:
             "Authorization": f"ApiKey {self._api_key}",
             "Content-Type": "application/vnd.api+json",
         }
-        self._current_user = None
+        self._current_user: Optional[User] = None
         self._validate_api()
         self._organisation_external_id = ""
 
