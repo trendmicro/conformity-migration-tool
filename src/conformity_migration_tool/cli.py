@@ -878,7 +878,7 @@ def copy_suppressed_check(
     legacy_check: Check,
 ):
     log.info(
-        f"    --> {legacy_check.rule_id}|{legacy_check.region}|{legacy_check.resource_name}|{legacy_check.resource}",
+        f"    --> {legacy_check.rule_id}|{legacy_check.region}|{legacy_check.service}|{legacy_check.resource_name}|{legacy_check.resource}",
         flush=True,
     )
     filters: Dict[str, Any] = {
