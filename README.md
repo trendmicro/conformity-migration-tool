@@ -5,7 +5,8 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 
 ## Requirements
 1. Python v3.7+
-2. API Keys for both Legacy Conformity and CloudOne Conformity
+2. Both accounts must have a valid license (Not expired)
+3. API Keys for both Legacy Conformity and CloudOne Conformity
    - **Note:** Both API Keys must have admin privileges
 
 ## How to use this tool
@@ -89,3 +90,17 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 - [X] Checks
   - **Limitation:** The API only allows writing a single note to the check so the tool won't be able to preserve the history of notes. In addition to that, API only allows a maximum of 200 characters of note. The tool will only get the most recent note and truncate it to 200 characters before writing it.
 - [X] Report Configs
+
+
+## Contributing
+
+If you encounter a bug, think of a useful feature, or find something confusing
+in the docs, please
+[Create a New Issue](https://github.com/atiradocc/conformity-migration-tool/issues/new)!
+
+We :heart: pull requests. If you'd like to fix a bug, contribute to a feature or
+just correct a typo, please feel free to do so.
+
+If you're thinking of adding a new feature, consider opening an issue first to
+discuss it to ensure it aligns with the direction of the project (and potentially
+save yourself some time!).
