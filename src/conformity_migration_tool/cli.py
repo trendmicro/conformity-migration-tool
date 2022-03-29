@@ -11,6 +11,7 @@ from PyInquirer import prompt
 from conformity_migration.cloud_accounts import get_cloud_account_adder
 from conformity_migration.conformity_api import (
     CloudOneConformityAPI,
+    ConformityAPI,
     ConformityError,
     LegacyConformityAPI,
 )
@@ -99,50 +100,58 @@ def acct_env_suffix(acct_environment: str) -> str:
     return f" ({acct_environment})" if acct_environment else ""
 
 
+def empty_legacy_conformity(legacy_api: LegacyConformityAPI):
+    empty_conformity(api=legacy_api, conformity_type="Legacy")
+
+
 def empty_c1_conformity(c1_api: CloudOneConformityAPI):
-    continue_ok = ask_confirmation(
-        msg="!!! WARNING !!! This will delete all your Cloud One Conformity accounts and configurations. Do you want to continue?",
-        ask_if_sure=True,
+    empty_conformity(api=c1_api, conformity_type="Cloud One")
+
+
+def empty_conformity(api: ConformityAPI, conformity_type: str):
+    continue_ok = ask_confirmation_with_text_verification(
+        msg=f"!!! WARNING !!! This will delete all your {conformity_type} Conformity accounts and configurations. Do you want to continue?",
+        verify_text=f"empty {conformity_type} Conformity",
     )
     if not continue_ok:
         return
 
-    print("Resetting Organisational Profile")
-    c1_api.reset_organisation_profile()
+    log.info("Resetting Organisational Profile")
+    api.reset_organisation_profile()
 
-    print("Deleting all Custom Profiles")
-    for prof in c1_api.get_custom_profiles():
-        print(f"  -- {prof.name}")
-        c1_api.delete_profile(profile_id=prof.profile_id)
+    log.info("Deleting all Custom Profiles")
+    for prof in api.get_custom_profiles():
+        log.info(f"  -- {prof.name}")
+        api.delete_profile(profile_id=prof.profile_id)
 
-    print("Deleting all Organisational Report Configs")
-    for rconf in c1_api.list_organisation_report_configs():
-        print(f"  -- {rconf.title}")
-        c1_api.delete_report_config(report_conf_id=rconf.report_config_id)
+    log.info("Deleting all Organisational Report Configs")
+    for rconf in api.list_organisation_report_configs():
+        log.info(f"  -- {rconf.title}")
+        api.delete_report_config(report_conf_id=rconf.report_config_id)
 
-    print("Deleting all Communication Settings (Organisation-level)")
-    cs_ids = {cs.com_setting_id for cs in c1_api.get_communication_settings(acct_id="")}
+    log.info("Deleting all Communication Settings (Organisation-level)")
+    cs_ids = {cs.com_setting_id for cs in api.get_communication_settings(acct_id="")}
     for cs_id in cs_ids:
-        print(f" -- {cs_id}")
-        c1_api.delete_communication_settings(com_setting_id=cs_id)
+        log.info(f" -- {cs_id}")
+        api.delete_communication_settings(com_setting_id=cs_id)
 
-    groups = c1_api.list_groups()
+    groups = api.list_groups()
     for group in groups:
-        print(f"Deleting Report Configs for group {group.name}")
-        for rconf in c1_api.list_group_report_configs(group_id=group.group_id):
-            print(f"  -- {rconf.title}")
-            c1_api.delete_report_config(report_conf_id=rconf.report_config_id)
+        log.info(f"Deleting Report Configs for group {group.name}")
+        for rconf in api.list_group_report_configs(group_id=group.group_id):
+            log.info(f"  -- {rconf.title}")
+            api.delete_report_config(report_conf_id=rconf.report_config_id)
 
-    print("Deleting all Accounts")
-    for acct in c1_api.list_accounts():
+    log.info("Deleting all Accounts")
+    for acct in api.list_accounts():
         env_suffix = acct_env_suffix(acct.environment)
-        print(f"  -- {acct.name}{env_suffix}")
-        c1_api.delete_account(acct_id=acct.account_id)
+        log.info(f"  -- {acct.name}{env_suffix}")
+        api.delete_account(acct_id=acct.account_id)
 
-    print("Deleting all Groups")
+    log.info("Deleting all Groups")
     for group in groups:
-        print(f"  -- {group.name}")
-        c1_api.delete_group(group_id=group.group_id)
+        log.info(f"  -- {group.name}")
+        api.delete_group(group_id=group.group_id)
 
 
 def prompt_initialize_organisation_profile():
@@ -1007,6 +1016,28 @@ def ask_confirmation_or_auto_overwrite(
     return ask_confirmation(msg=msg, default=default, ask_if_sure=ask_if_sure)
 
 
+def ask_confirmation_with_text_verification(
+    msg: str, verify_text: str, default=False
+) -> bool:
+    questions = [
+        {
+            "type": "confirm",
+            "message": msg,
+            "name": "continue",
+            "default": default,
+        },
+    ]
+    answer = prompt(questions=questions)
+    cont = answer["continue"]
+    if not cont:
+        return False
+
+    entered_text = input(
+        f"Please enter the text '{verify_text}' to confirm this (exclude single quote): "
+    )
+    return entered_text == verify_text
+
+
 def ask_confirmation(msg: str, default=False, ask_if_sure=False) -> bool:
     questions = [
         {
@@ -1200,6 +1231,19 @@ def read_accts_file(accounts_file: str) -> Set[str]:
 
 
 @cli.command(
+    "empty-legacy",
+    help="Deletes all accounts and configurations in Legacy Conformity",
+)
+def empty_legacy():
+    try:
+        empty_legacy_conformity(legacy_api=legacy_conformity_api())
+    except ConformityError as e:
+        log.error(e)
+        log.error(e.details)
+        # raise e
+
+
+@cli.command(
     "empty-c1",
     help="Deletes all accounts and configurations in Cloud One Conformity",
     hidden=True,
@@ -1208,8 +1252,8 @@ def empty_c1():
     try:
         empty_c1_conformity(c1_api=c1_conformity_api())
     except ConformityError as e:
-        print(e)
-        print(e.details)
+        log.error(e)
+        log.error(e.details)
         # raise e
 
 
