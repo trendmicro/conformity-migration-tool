@@ -954,7 +954,8 @@ def copy_suppressed_checks(
 def show_instructions_for_missing_check(check: Check):
     log.warn(
         f"""
-    Can't find the corresponding check in CloudOne. Please manually suppress the check below or try re-running this tool.
+    Can't find the corresponding check in Cloud One. Please manually suppress the check below or try running Conformity Bot
+    on this account and run this tool again.
         RuleID: {check.rule_id}
         Region: {check.region}
         Resource: {check.resource}
