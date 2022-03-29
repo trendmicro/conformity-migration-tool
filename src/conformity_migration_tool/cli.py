@@ -1102,7 +1102,7 @@ def configure():
     show_envvar=True,
     required=False,
     default=False,
-    help="Skips prompting for manually edit AWS Conformity stack",
+    help="Skips prompting for manually editing AWS Conformity stack",
 )
 @click.option(
     "--overwrite-all",
