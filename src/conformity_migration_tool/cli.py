@@ -2,7 +2,7 @@ import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set
 
 import click
 import yaml
@@ -164,7 +164,12 @@ this tool can migrate the Organisation Profile settings. Follow these steps to i
         done = ask_confirmation(msg="Are you done?", ask_if_sure=True)
 
 
-def run_migration(legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI):
+def run_migration(
+    legacy_api: LegacyConformityAPI,
+    c1_api: CloudOneConformityAPI,
+    include_accts=Optional[Set[str]],
+    exclude_accts=Optional[Set[str]],
+):
     # this is part of workaround fix for Conformity Public API
     # will initialize Organisation Profile
     prompt_initialize_organisation_profile()
@@ -175,7 +180,12 @@ def run_migration(legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
 
     log.info("Adding all cloud accounts", flush=True)
     cloud_accts_to_migrate = exec_migration_func(
-        lambda: add_cloud_accounts(legacy_api=legacy_api, c1_api=c1_api)
+        lambda: add_cloud_accounts(
+            legacy_api=legacy_api,
+            c1_api=c1_api,
+            include_accts=include_accts,
+            exclude_accts=exclude_accts,
+        )
     )
     if cloud_accts_to_migrate is None:
         cloud_accts_to_migrate = dict()
@@ -282,11 +292,23 @@ def update_organisation_profile(
 
 
 def add_cloud_accounts(
-    legacy_api: LegacyConformityAPI, c1_api: CloudOneConformityAPI
+    legacy_api: LegacyConformityAPI,
+    c1_api: CloudOneConformityAPI,
+    include_accts=Optional[Set[str]],
+    exclude_accts=Optional[Set[str]],
 ) -> Dict[str, Dict[str, str]]:
 
     c1_accts = c1_api.list_accounts()
     legacy_accts = legacy_api.list_accounts()
+
+    # a value of None means it will not choose any account to include -- all accounts will be added to Cloud One unless in the excluded list
+    # a value of an empty set means it will include nothing -- no account will be added to Cloud One
+    if include_accts is not None:
+        legacy_accts = [acct for acct in legacy_accts if acct.name in include_accts]
+
+    # a value of None or of an empty set means the same thing: it will exclude nothing
+    if exclude_accts:
+        legacy_accts = [acct for acct in legacy_accts if acct.name not in exclude_accts]
 
     legacy_cloud_type_accts_map = cloud_type_accts_map(legacy_accts)
     c1_cloud_type_accts_map = cloud_type_accts_map(c1_accts)
@@ -698,6 +720,10 @@ def migrate_account_configurations(
     if bot_settings:
         bot_settings.pop("lastModifiedFrom", None)
         bot_settings.pop("lastModifiedBy", None)
+        if cloud_type == "aws" and str2bool(
+            os.getenv("ENABLE_C1_AWS_CONFORMITY_BOT", "False")
+        ):
+            bot_settings["disabled"] = None
         exec_migration_func(
             lambda: c1_api.update_account_bot_settings(
                 acct_id=c1_acct_id, settings=bot_settings
@@ -932,7 +958,8 @@ def copy_suppressed_checks(
 def show_instructions_for_missing_check(check: Check):
     log.warn(
         f"""
-    Can't find the corresponding check in CloudOne. Please manually suppress the check below or try re-running this tool.
+    Can't find the corresponding check in Cloud One. Please manually suppress the check below or try running Conformity Bot
+    on this account and run this tool again.
         RuleID: {check.rule_id}
         Region: {check.region}
         Resource: {check.resource}
@@ -1080,7 +1107,7 @@ def configure():
     show_envvar=True,
     required=False,
     default=False,
-    help="Skips prompting for manually edit AWS Conformity stack",
+    help="Skips prompting for manually editing AWS Conformity stack",
 )
 @click.option(
     "--overwrite-all",
@@ -1100,18 +1127,76 @@ def configure():
     default=False,
     help="Will always allow migration to continue even when some configuration fails to migrate.",
 )
-def run(skip_aws_prompt: bool, overwrite_all: bool, skip_migration_failures: bool):
+@click.option(
+    "--include-accounts-file",
+    required=False,
+    type=str,
+    help="Text file containing account names that will be the only ones included in migration. Each account name should be in a separate line. An empty text file means the tool won't include any account in the migration.",
+)
+@click.option(
+    "--exclude-accounts-file",
+    required=False,
+    type=str,
+    help="Text file containing account names that will be excluded from migration. Each account name should be in a separate line.",
+)
+@click.option(
+    "--enable-aws-bot",
+    is_flag=True,
+    envvar="ENABLE_C1_AWS_CONFORMITY_BOT",
+    show_envvar=True,
+    required=False,
+    default=False,
+    help="Enables bot settings for all migrated AWS accounts on Cloud One Conformity.",
+)
+def run(
+    skip_aws_prompt: bool,
+    overwrite_all: bool,
+    skip_migration_failures: bool,
+    include_accounts_file: str,
+    exclude_accounts_file: str,
+    enable_aws_bot: bool,
+):
+    include_accts: Optional[Set[str]] = None
+    exclude_accts: Optional[Set[str]] = None
+    if include_accounts_file:
+        include_accts = read_accts_file(accounts_file=include_accounts_file)
+    if exclude_accounts_file:
+        exclude_accts = read_accts_file(accounts_file=exclude_accounts_file)
+
     os.environ["SKIP_AWS_PROMPT"] = "True" if skip_aws_prompt else "False"
     os.environ["C1_CONFORMITY_OVERWRITE_ALL"] = "True" if overwrite_all else "False"
     os.environ["SKIP_MIGRATION_FAILURES"] = (
         "True" if skip_migration_failures else "False"
     )
+    os.environ["ENABLE_C1_AWS_CONFORMITY_BOT"] = "True" if enable_aws_bot else "False"
     try:
-        run_migration(legacy_api=legacy_conformity_api(), c1_api=c1_conformity_api())
+        run_migration(
+            legacy_api=legacy_conformity_api(),
+            c1_api=c1_conformity_api(),
+            include_accts=include_accts,
+            exclude_accts=exclude_accts,
+        )
     except ConformityError as e:
         log.error(e)
         log.error(e.details)
         # raise e
+
+
+def read_accts_file(accounts_file: str) -> Set[str]:
+    accts = set()
+    accounts_path = Path(accounts_file.strip())
+    if not accounts_path.exists():
+        raise FileNotFoundError(f"File does not exists: {accounts_file}")
+    if not accounts_path.is_file():
+        raise FileNotFoundError(f"Not a regular file: {accounts_file}")
+
+    with open(accounts_path, mode="r") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            accts.add(line)
+    return accts
 
 
 @cli.command(
