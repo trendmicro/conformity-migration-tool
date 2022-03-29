@@ -720,6 +720,10 @@ def migrate_account_configurations(
     if bot_settings:
         bot_settings.pop("lastModifiedFrom", None)
         bot_settings.pop("lastModifiedBy", None)
+        if cloud_type == "aws" and str2bool(
+            os.getenv("ENABLE_C1_AWS_CONFORMITY_BOT", "False")
+        ):
+            bot_settings["disabled"] = None
         exec_migration_func(
             lambda: c1_api.update_account_bot_settings(
                 acct_id=c1_acct_id, settings=bot_settings
@@ -1135,12 +1139,22 @@ def configure():
     type=str,
     help="Text file containing account names that will be excluded from migration. Each account name should be in a separate line.",
 )
+@click.option(
+    "--enable-aws-bot",
+    is_flag=True,
+    envvar="ENABLE_C1_AWS_CONFORMITY_BOT",
+    show_envvar=True,
+    required=False,
+    default=False,
+    help="Enables bot settings for all migrated AWS accounts on Cloud One Conformity.",
+)
 def run(
     skip_aws_prompt: bool,
     overwrite_all: bool,
     skip_migration_failures: bool,
     include_accounts_file: str,
     exclude_accounts_file: str,
+    enable_aws_bot: bool,
 ):
     include_accts: Optional[Set[str]] = None
     exclude_accts: Optional[Set[str]] = None
@@ -1154,6 +1168,7 @@ def run(
     os.environ["SKIP_MIGRATION_FAILURES"] = (
         "True" if skip_migration_failures else "False"
     )
+    os.environ["ENABLE_C1_AWS_CONFORMITY_BOT"] = "True" if enable_aws_bot else "False"
     try:
         run_migration(
             legacy_api=legacy_conformity_api(),
