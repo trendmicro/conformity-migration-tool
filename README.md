@@ -34,6 +34,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
     ```
     conformity-migration configure
     ```
+    **Note:** Once you finish the tool configuration once, a file called **user-config.yml** with the settings you configured will be generated in the same folder, in case you need to re-run the tool.
 
 7) If you have AWS accounts, you have the option to use this CLI for updating your `ExternalId`:
    ```
@@ -90,6 +91,18 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 - [X] Checks
   - **Limitation:** The API only allows writing a single note to the check so the tool won't be able to preserve the history of notes. In addition to that, API only allows a maximum of 200 characters of note. The tool will only get the most recent note and truncate it to 200 characters before writing it.
 - [X] Report Configs
+
+## Troubleshooting
+If you encounter any errors in the execution, please [Create a New Issue](https://github.com/atiradocc/conformity-migration-tool/issues/new) describing the steps that you went through, the results expected, and the actual results that you got.
+
+### Support logs
+The tool automatically generates log files when an error is found. In the same folder that you ran the tool, you will find these files:
+
+- ```conformity-migration-error.log``` -> Specific logs about errors encountered from the last runtime.
+
+- ```conformity-migration.log``` -> General log information about the tool the last runtime.
+
+**Note:** Do not share these files publically. They might contain sensitive information about your environment.
 
 
 ## Contributing
