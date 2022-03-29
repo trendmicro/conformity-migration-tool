@@ -102,7 +102,7 @@ The tool automatically generates log files when an error is found. In the same f
 
 - ```conformity-migration.log``` -> General log information about the tool the last runtime.
 
-**Note:** Please don't share these files publicly, they might contain sensitive information about your environment. In case you need to share for support proposes, mask sensitive information before sending it.
+**Note:** Please don't share these files publicly, they might contain sensitive information about your environment. In case you need to share for support purposes, mask sensitive information before sending it.
 
 
 ## Contributing
