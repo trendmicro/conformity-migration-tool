@@ -1,6 +1,11 @@
 # conformity-migration-tool
 Migrates your visiblity information in cloudconformity.com to cloudone.trendmicro.com
 
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/atiradocc/conformity-migration-tool?color=red&label=Last%20Release&logo=trend-micro&logoColor=red)
+![GitHub issues](https://img.shields.io/github/issues/atiradocc/conformity-migration-tool?label=Issues)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/atiradocc/conformity-migration-tool?label=Pull%20Requests)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/conformity-migration-tool?logo=python&label=Python%20Version%20Support)
+
 ## **⚠ WARNING: This tool will overwrite your Cloud One Conformity**
 
 ## Requirements
