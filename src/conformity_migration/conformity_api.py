@@ -1007,3 +1007,23 @@ class WorkaroundFixConformityAPI(ConformityAPIBaseDecorator):
         if com_settings is None:
             com_settings = []
         return com_settings
+
+    def update_account_rule_setting(
+        self, acct_id: str, rule_id: str, setting: dict, note: str = "Copied from API"
+    ):
+        try:
+            self.api.update_account_rule_setting(
+                acct_id=acct_id, rule_id=rule_id, setting=setting, note=note
+            )
+        except ConformityClientError as e:
+            if (
+                str(e).startswith("422 Client Error")
+                and "`exceptions` is not configurable" in e.details
+            ):
+                # print(f"Retrying to update rule {rule_id}, now removing exceptions")
+                setting.pop("exceptions", None)
+                self.api.update_account_rule_setting(
+                    acct_id=acct_id, rule_id=rule_id, setting=setting, note=note
+                )
+            else:
+                raise e
