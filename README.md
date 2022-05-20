@@ -9,7 +9,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 ## **⚠ WARNING: This tool will overwrite your Cloud One Conformity**
 
 ## Requirements
-1. Python v3.7+
+1. Python versions 3.7, 3.8, or 3.9
 2. Both accounts must have a valid license (Not expired)
 3. API Keys for both Legacy Conformity and CloudOne Conformity
    - **Note:** Both API Keys must have admin privileges
@@ -20,7 +20,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 
 2) Start a shell/terminal on the folder you just created or chosen.
 
-3) Create a python3 virtual environment (minimum: python v3.7)
+3) Create a python3 virtual environment
     ```
     python3 -m venv .venv
     ```

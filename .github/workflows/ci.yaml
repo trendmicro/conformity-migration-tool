@@ -10,7 +10,7 @@ on:
       - synchronize
 
 env:
-  PYTHON_LATEST: "3.10"
+  PYTHON_LATEST: "3.9"
 
 jobs:
   tests:
@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.7", "3.10"]
+        python-version: ["3.7", "3.9"]
 
     steps:
       - name: Checkout Code

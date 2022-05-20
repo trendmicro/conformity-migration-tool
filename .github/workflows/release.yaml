@@ -5,7 +5,7 @@ on:
     types: [created]
 
 env:
-  PYTHON_LATEST: "3.10"
+  PYTHON_LATEST: "3.9"
 
 jobs:
   release:
