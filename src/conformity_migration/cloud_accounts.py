@@ -28,7 +28,10 @@ class AWSCloudAccountAdder(CloudAccountAdder):
         self.c1_api = c1_api
 
     def _account_uniq_attrib(self, acct: Account) -> str:
-        return acct.attributes["awsaccount-id"]
+        aws_acct_num = acct.attributes.get("awsaccount-id", "")
+        if not aws_acct_num:
+            print(f"No AWS account number for: {acct.name} {acct.environment}")
+        return aws_acct_num
 
     def account_exists(
         self, c1_accts: List[Account], acct: Account
