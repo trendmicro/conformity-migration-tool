@@ -1,8 +1,9 @@
+import csv
 import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 import click
 import yaml
@@ -39,6 +40,9 @@ from .di import (
 from .utils import str2bool
 
 log = logger()
+
+
+AccountEnv = Tuple[str, str]
 
 
 def create_user_config(user_conf_path: Path):
@@ -176,8 +180,8 @@ this tool can migrate the Organisation Profile settings. Follow these steps to i
 def run_migration(
     legacy_api: LegacyConformityAPI,
     c1_api: CloudOneConformityAPI,
-    include_accts=Optional[Set[str]],
-    exclude_accts=Optional[Set[str]],
+    include_accts=Optional[Set[AccountEnv]],
+    exclude_accts=Optional[Set[AccountEnv]],
 ):
     # this is part of workaround fix for Conformity Public API
     # will initialize Organisation Profile
@@ -300,24 +304,46 @@ def update_organisation_profile(
     c1_api.update_organisation_profile(profile=legacy_org_profile)
 
 
+def include_exclude_accts(
+    legacy_accts: List[Account],
+    include_accts=Optional[Set[AccountEnv]],
+    exclude_accts=Optional[Set[AccountEnv]],
+) -> List[Account]:
+    # a value of None means it will not choose any account to include -- all accounts will be added to Cloud One unless in the excluded list
+    # a value of an empty set means it will include nothing -- no account will be added to Cloud One
+    if include_accts is not None:
+        legacy_accts = [
+            acct
+            for acct in legacy_accts
+            if (acct.name, acct.environment) in include_accts
+        ]
+
+    # a value of None or of an empty set means the same thing: it will exclude nothing
+    if exclude_accts:
+        legacy_accts = [
+            acct
+            for acct in legacy_accts
+            if (acct.name, acct.environment) not in exclude_accts
+        ]
+
+    return legacy_accts
+
+
 def add_cloud_accounts(
     legacy_api: LegacyConformityAPI,
     c1_api: CloudOneConformityAPI,
-    include_accts=Optional[Set[str]],
-    exclude_accts=Optional[Set[str]],
+    include_accts=Optional[Set[AccountEnv]],
+    exclude_accts=Optional[Set[AccountEnv]],
 ) -> Dict[str, Dict[str, str]]:
 
     c1_accts = c1_api.list_accounts()
     legacy_accts = legacy_api.list_accounts()
 
-    # a value of None means it will not choose any account to include -- all accounts will be added to Cloud One unless in the excluded list
-    # a value of an empty set means it will include nothing -- no account will be added to Cloud One
-    if include_accts is not None:
-        legacy_accts = [acct for acct in legacy_accts if acct.name in include_accts]
-
-    # a value of None or of an empty set means the same thing: it will exclude nothing
-    if exclude_accts:
-        legacy_accts = [acct for acct in legacy_accts if acct.name not in exclude_accts]
+    legacy_accts = include_exclude_accts(
+        legacy_accts=legacy_accts,
+        include_accts=include_accts,
+        exclude_accts=exclude_accts,
+    )
 
     legacy_cloud_type_accts_map = cloud_type_accts_map(legacy_accts)
     c1_cloud_type_accts_map = cloud_type_accts_map(c1_accts)
@@ -1162,13 +1188,13 @@ def configure():
     "--include-accounts-file",
     required=False,
     type=str,
-    help="Text file containing account names that will be the only ones included in migration. Each account name should be in a separate line. An empty text file means the tool won't include any account in the migration.",
+    help="CSV file containing accounts that will be the only ones included in migration. Each row should consists of 2 fields: first is the account name and second is the environment as they appear on Conformity Dashboard. An empty file means the tool won't include any account in the migration.",
 )
 @click.option(
     "--exclude-accounts-file",
     required=False,
     type=str,
-    help="Text file containing account names that will be excluded from migration. Each account name should be in a separate line.",
+    help="CSV file containing accounts that will be excluded from migration. Each row should consists of 2 fields: first is the account name and second is the environment as they appear on Conformity Dashboard.",
 )
 @click.option(
     "--enable-aws-bot",
@@ -1187,8 +1213,8 @@ def run(
     exclude_accounts_file: str,
     enable_aws_bot: bool,
 ):
-    include_accts: Optional[Set[str]] = None
-    exclude_accts: Optional[Set[str]] = None
+    include_accts: Optional[Set[AccountEnv]] = None
+    exclude_accts: Optional[Set[AccountEnv]] = None
     if include_accounts_file:
         include_accts = read_accts_file(accounts_file=include_accounts_file)
     if exclude_accounts_file:
@@ -1213,7 +1239,7 @@ def run(
         # raise e
 
 
-def read_accts_file(accounts_file: str) -> Set[str]:
+def read_accts_file(accounts_file: str) -> Set[AccountEnv]:
     accts = set()
     accounts_path = Path(accounts_file.strip())
     if not accounts_path.exists():
@@ -1221,12 +1247,12 @@ def read_accts_file(accounts_file: str) -> Set[str]:
     if not accounts_path.is_file():
         raise FileNotFoundError(f"Not a regular file: {accounts_file}")
 
-    with open(accounts_path, mode="r") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            accts.add(line)
+    with open(accounts_path, newline="", mode="r") as fh:
+        csvr = csv.reader(fh, dialect="excel")
+        for row in csvr:
+            acct_name = row[0]
+            acct_env = row[1] if len(row) > 1 else ""
+            accts.add((acct_name, acct_env))
     return accts
 
 

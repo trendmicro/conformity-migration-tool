@@ -270,7 +270,10 @@ class Account:
 
     @property
     def environment(self) -> str:
-        return self.attributes["environment"]
+        env = self.attributes.get("environment", "")
+        if env is None:
+            env = ""
+        return env
 
     @property
     def cloud_type(self) -> str:
