@@ -122,7 +122,7 @@ def generate_csv(csv_file: str):
         exists=True, file_okay=True, dir_okay=False, readable=True, resolve_path=True
     ),
     required=False,
-    help="CSV files containing AWS accounts with each account's profile and region to use.",
+    help="An optional CSV file containing AWS accounts' credentials and stack information. Non-empty field values in the CSV file will override whatever values entered in the CLI options.",
 )
 @click.option(
     "--region",
@@ -468,99 +468,6 @@ def wait_for_update_stack(
             is_success = False
             break
     return is_success, reason
-
-
-# @cli.command("update-stackset", help="Updates ExternalID of Cloud Conformity StackSet")
-# @click.option(
-#     "--stackset-name",
-#     default="CloudConformity",
-#     show_default=True,
-#     required=False,
-#     help="Name of the Cloud Conformity StackSet",
-# )
-# @click.option(
-#     "--external-id",
-#     type=str,
-#     required=True,
-#     help="New value for the StackSet paramater ExternalID",
-# )
-# @click.pass_context
-# def update_stackset(ctx, stackset_name: str, external_id: str):
-
-#     region = ctx.obj["region"]
-#     profile = ctx.obj["profile"]
-
-#     if profile:
-#         os.environ["AWS_PROFILE"] = profile
-#     cfn = boto3.client("cloudformation", region_name=region)
-
-#     print(f"Region: {region}")
-#     print(f"AWS_PROFILE: {profile}")
-#     print(f"StackSet: {stackset_name}")
-#     print(f"ExternalID: {external_id}")
-
-#     params = [
-#         ParameterTypeDef(
-#             ParameterKey="AccountId",
-#             UsePreviousValue=True,
-#         ),
-#         ParameterTypeDef(
-#             ParameterKey="ExternalId",
-#             ParameterValue=external_id,
-#         ),
-#     ]
-#     res: UpdateStackSetOutputTypeDef = cfn.update_stack_set(
-#         StackSetName=stackset_name,
-#         UsePreviousTemplate=True,
-#         Parameters=params,
-#         Capabilities=["CAPABILITY_NAMED_IAM"],
-#     )
-#     pretty_print(res)
-#     operation_id = res["OperationId"]
-#     print(f"OperationId: {operation_id}")
-
-#     (is_successful, reason) = wait_for_update_stack_set(
-#         cfn=cfn,
-#         stackset_name=stackset_name,
-#         operation_id=operation_id,
-#         check_interval_in_secs=5,
-#     )
-#     if is_successful:
-#         print("Updated Successfully :-)")
-#     else:
-#         print("Update Failed!")
-#         print(f"Reason: {reason}")
-
-
-# def wait_for_update_stack_set(
-#     cfn: CloudFormationClient,
-#     stackset_name: str,
-#     operation_id: str,
-#     check_interval_in_secs=5,
-# ) -> Tuple[bool, str]:
-#     print("Waiting for StackSet update to finish", end="")
-#     is_success = False
-#     reason = ""
-#     while True:
-#         print(".", end="")
-#         res: DescribeStackSetOperationOutputTypeDef = cfn.describe_stack_set_operation(
-#             StackSetName=stackset_name, OperationId=operation_id
-#         )
-#         operation = res["StackSetOperation"]
-#         status = operation["Status"]
-#         if status in {"RUNNING", "QUEUED"}:
-#             time.sleep(check_interval_in_secs)
-#             continue
-#         reason = f"Status: {status}"
-#         if status == "SUCCEEDED":
-#             is_success = True
-#             break
-#         else:
-#             pretty_print(res)
-#             is_success = False
-#             break
-#     print()
-#     return is_success, reason
 
 
 def pretty_print(obj):
