@@ -41,20 +41,36 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
     ```
     **Note:** Once you finish the tool configuration once, a file called **user-config.yml** with the settings you configured will be generated in the same folder, in case you need to re-run the tool.
 
-7) If you have AWS accounts, you have the option to use this CLI for updating your `ExternalId`:
-   ```
-   conformity-migration-aws generate-csv <CSV_FILE>
-   ```
-   Update your CSV file with your AWS credentials. Then use the updated csv to run the command below:
-   ```
-   conformity-migration-aws update-stack --csv-file <CSV_FILE>
-   ```
-   You can also run this CLI to update an invidual account's stack, which is useful if you want to
-   wrap it in your own script that will iterate through all your accounts. To find those options,
-   please run this command:
+7) If you have AWS accounts to migrate, you can either manually update your Conformity Stack's `ExternalID` parameter during migration on the next step or you can run this command `conformity-migration-aws` first before migration.
+
+   Run this command to see all the available options:
    ```
    conformity-migration-aws update-stack --help
    ```
+   Example command:
+   ```
+   conformity-migration-aws update-stack --access-key <aws-access-key-here> --secret-key <aws-secret-key-here>
+   ```
+   Using AWS_PROFILE:
+   ```
+   conformity-migration-aws update-stack --profile <aws-profile-here>
+   ```
+   
+   For multiple accounts which you have cross-account role to use, you can add the option `--cross-account-role-name`.
+
+   For multiple accounts which you don't have cross-account role to use or for a more granular control on each accounts' credentials, do the following steps:
+
+   a. Generate a CSV file containing all your AWS accounts and default stack information from Legacy conformity:
+   ```
+   conformity-migration-aws generate-csv <CSV_FILE>
+   ```
+   b. Update the CSV file with your AWS credentials or stack information when necessary.
+   
+   c. Run the update-stack command with CLI option "--csv-file". You can use other options together with this option. Whatever non-empty values you put in the CSV file will override the values used in the CLI options.
+   ```
+   conformity-migration-aws update-stack --csv-file <CSV_FILE>
+   ```
+
 
 8)  Run the migration
     ```
