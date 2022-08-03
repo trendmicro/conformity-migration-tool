@@ -1,7 +1,6 @@
 import csv
 import json
 import multiprocessing as mp
-import os
 import time
 from dataclasses import dataclass
 from typing import Iterable, Tuple
@@ -16,6 +15,27 @@ from mypy_boto3_cloudformation.type_defs import (
 )
 
 from .di import c1_conformity_api, legacy_conformity_api
+
+
+@dataclass
+class LegacyConformityAWSAccountInfo:
+    account_name: str
+    aws_account_number: str
+    old_external_id: str
+
+
+def get_legacy_conformity_aws_accounts_info() -> Iterable[
+    LegacyConformityAWSAccountInfo
+]:
+    legacy_api = legacy_conformity_api()
+    old_external_id = legacy_api.get_organisation_external_id()
+    accts = [acct for acct in legacy_api.list_accounts() if acct.cloud_type == "aws"]
+    for acct in accts:
+        yield LegacyConformityAWSAccountInfo(
+            account_name=acct.name,
+            aws_account_number=acct.attributes["awsaccount-id"],
+            old_external_id=old_external_id,
+        )
 
 
 @click.group()
@@ -33,8 +53,6 @@ def cli(ctx):
 @click.argument("csv-file")
 def generate_csv(csv_file: str):
     print(f"Generating CSV: {csv_file}")
-    legacy_api = legacy_conformity_api()
-    accts = [acct for acct in legacy_api.list_accounts() if acct.cloud_type == "aws"]
     with open(csv_file, newline="", mode="w") as fh:
         csvw = csv.DictWriter(
             fh,
@@ -48,27 +66,26 @@ def generate_csv(csv_file: str):
                 "AWS_ACCESS_KEY_ID",
                 "AWS_SECRET_ACCESS_KEY",
                 "AWS_SESSION_TOKEN",
+                "Cross-Account Role Name",
             ],
             dialect="excel",
         )
         csvw.writeheader()
-        for acct in accts:
-            access_conf = legacy_api.get_account_access_configuration(
-                acct_id=acct.account_id
-            )
-            old_external_id = access_conf["externalId"]
 
+        accts = get_legacy_conformity_aws_accounts_info()
+        for acct in accts:
             csvw.writerow(
                 {
-                    "Account Name": acct.name,
-                    "AWS Account Number": acct.attributes["awsaccount-id"],
-                    "Old ExternalID": old_external_id,
+                    "Account Name": acct.account_name,
+                    "AWS Account Number": acct.aws_account_number,
+                    "Old ExternalID": acct.old_external_id,
                     "Conformity Stack Name": "CloudConformity",
                     "Conformity Stack Region": "us-east-1",
                     "AWS_PROFILE": "",
                     "AWS_ACCESS_KEY_ID": "",
                     "AWS_SECRET_ACCESS_KEY": "",
                     "AWS_SESSION_TOKEN": "",
+                    "Cross-Account Role Name": "",
                 }
             )
     print("Done!")
@@ -153,6 +170,13 @@ def generate_csv(csv_file: str):
     default=None,
     help="AWS Session Token",
 )
+@click.option(
+    "--cross-account-role-name",
+    type=str,
+    required=False,
+    default=None,
+    help="Cross-Account Role name (e.g. OrganizationAccountAccessRole). The role should at least have the permissions necessary to update the Conformity stack.",
+)
 @click.pass_context
 def update_stack(
     ctx,
@@ -164,6 +188,7 @@ def update_stack(
     access_key: str,
     secret_key: str,
     session_token: str,
+    cross_account_role_name: str,
 ):
     # region = ctx.obj["region"]
     # profile = ctx.obj["profile"]
@@ -172,7 +197,6 @@ def update_stack(
         external_id = c1_conformity_api().get_organisation_external_id()
         print(f"ExternalId: {external_id}")
 
-    proc_count = 1
     accts: Iterable[AccountStackInfo]
     if csv_file:
         accts = read_csv_file(csv_file=csv_file)
@@ -184,24 +208,27 @@ def update_stack(
             default_access_key=access_key,
             default_secret_key=secret_key,
             default_session_token=session_token,
+            default_cross_account_role_name=cross_account_role_name,
         )
-        accts = list(accts)
-        proc_count = min(len(accts), 10)
     else:
-        accts = [
+        accts = (
             AccountStackInfo(
-                account_name="",
-                aws_account_number="",
-                old_external_id="",
+                account_name=acct.account_name,
+                aws_account_number=acct.aws_account_number,
+                old_external_id=acct.old_external_id,
                 stack_name=stack_name,
                 stack_region=region,
                 aws_profile=profile,
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
                 aws_session_token=session_token,
+                cross_account_role_name=cross_account_role_name,
             )
-        ]
+            for acct in get_legacy_conformity_aws_accounts_info()
+        )
 
+    accts = list(accts)
+    proc_count = min(len(accts), 10)
     with mp.Pool(processes=proc_count) as pool:
         params = _update_stack_params(accts=accts, external_id=external_id)
         pool.map(_update_stack_worker, params)
@@ -218,6 +245,7 @@ class AccountStackInfo:
     aws_access_key_id: str
     aws_secret_access_key: str
     aws_session_token: str
+    cross_account_role_name: str
 
 
 def _update_stack_params(
@@ -245,6 +273,7 @@ def _fill_acct_with_defaults(
     default_access_key: str,
     default_secret_key: str,
     default_session_token: str,
+    default_cross_account_role_name: str,
 ) -> Iterable[AccountStackInfo]:
     for acct in accts:
         stack_name = acct.stack_name if acct.stack_name else default_stack_name
@@ -261,6 +290,11 @@ def _fill_acct_with_defaults(
         session_token = (
             acct.aws_session_token if acct.aws_session_token else default_session_token
         )
+        cross_account_role_name = (
+            acct.cross_account_role_name
+            if acct.cross_account_role_name
+            else default_cross_account_role_name
+        )
         yield AccountStackInfo(
             account_name=acct.account_name,
             aws_account_number=acct.aws_account_number,
@@ -271,6 +305,7 @@ def _fill_acct_with_defaults(
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             aws_session_token=session_token,
+            cross_account_role_name=cross_account_role_name,
         )
 
 
@@ -288,29 +323,68 @@ def read_csv_file(csv_file: str) -> Iterable[AccountStackInfo]:
                 aws_access_key_id=rec["AWS_ACCESS_KEY_ID"].strip(),
                 aws_secret_access_key=rec["AWS_SECRET_ACCESS_KEY"].strip(),
                 aws_session_token=rec["AWS_SESSION_TOKEN"].strip(),
+                cross_account_role_name=rec.get("Cross-Account Role Name", "").strip(),
             )
             yield acct
 
 
-def _update_stack(acct: AccountStackInfo, external_id: str):
+def _get_sess_acct_number(sess: boto3.Session) -> str:
+    sts = sess.client("sts")
+    return sts.get_caller_identity()["Account"]
 
-    if acct.aws_profile:
-        os.environ["AWS_PROFILE"] = acct.aws_profile
-        boto3.setup_default_session(profile_name=acct.aws_profile)
-    else:
-        boto3.setup_default_session(profile_name=None)
+
+def _get_cross_acct_sess(sess: boto3.Session, aws_acct_num: str, role_name: str):
+    sess_acct_num = _get_sess_acct_number(sess)
+    if sess_acct_num == aws_acct_num:
+        return sess
+
+    sts = sess.client("sts")
+    resp = sts.assume_role(
+        RoleArn=f"arn:aws:iam::{aws_acct_num}:role/{role_name}",
+        RoleSessionName=f"cross_acct_sess_{sess_acct_num}",
+        DurationSeconds=3600,
+    )
+
+    creds = resp["Credentials"]
+
+    return boto3.Session(
+        region_name=sess.region_name,
+        aws_access_key_id=creds["AccessKeyId"],
+        aws_secret_access_key=creds["SecretAccessKey"],
+        aws_session_token=creds["SessionToken"],
+    )
+
+
+def _update_stack(acct: AccountStackInfo, external_id: str):
 
     if acct.aws_access_key_id and acct.aws_secret_access_key:
         session_token = acct.aws_session_token if acct.aws_session_token else None
-        cfn = boto3.client(
-            "cloudformation",
+        sess = boto3.Session(
             region_name=acct.stack_region,
             aws_access_key_id=acct.aws_access_key_id,
             aws_secret_access_key=acct.aws_secret_access_key,
             aws_session_token=session_token,
         )
     else:
-        cfn = boto3.client("cloudformation", region_name=acct.stack_region)
+        sess = boto3.Session(
+            profile_name=acct.aws_profile, region_name=acct.stack_region
+        )
+
+    if acct.cross_account_role_name:
+        sess = _get_cross_acct_sess(
+            sess=sess,
+            aws_acct_num=acct.aws_account_number,
+            role_name=acct.cross_account_role_name,
+        )
+
+    sess_acct_num = _get_sess_acct_number(sess)
+    if sess_acct_num != acct.aws_account_number:
+        print(
+            f"AWS credentials not for this account AWS={acct.aws_account_number} ({acct.account_name})"
+        )
+        return
+
+    cfn = sess.client("cloudformation", region_name=acct.stack_region)
     old_external_id = get_stack_external_id(cfn=cfn, stack_name=acct.stack_name)
 
     acct_info = (
