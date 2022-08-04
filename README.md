@@ -41,6 +41,8 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
     ```
     **Note:** Once you finish the tool configuration once, a file called **user-config.yml** with the settings you configured will be generated in the same folder, in case you need to re-run the tool.
 
+    For Cloud One Conformity API endpoints, you can use the format: ```https://conformity.{region}.cloudone.trendmicro.com/api/```, here you can find more information about [Cloud One Regions](https://cloudone.trendmicro.com/docs/identity-and-account-management/c1-regions/).
+
 7) If you have AWS accounts to migrate, you can either manually update your Conformity Stack's `ExternalID` parameter during migration on the next step or you can run this command `conformity-migration-aws` first before migration.
 
    Run this command to see all the available options:
@@ -82,6 +84,24 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
     conformity-migration run --skip-aws-prompt
     ```
 
+9)  In case you need to only migrate one or a few accounts, you can create a CSV file containing accounts that will be the only ones included in migration. In the CSV file, each row should consists of 2 fields: first is the account name and second is the environment as they appear on Conformity Dashboard. An empty file means the tool won't include any account in the migration. Here's an example:
+
+    ```
+    my-aws-account-name,production
+    my-azure-subscription-name,development
+    ```
+
+    To excute the migration simply execute:
+
+    ```
+    conformity-migration run --include-accounts-file file.csv
+    ```
+
+    The same concept apply to exclude accounts from the migration:
+
+    ```
+    conformity-migration run --exclude-accounts-file file.csv
+    ```
 
 ## Migration support
 ### Cloud Types
@@ -97,6 +117,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
   - **Note**: The tool will display other users that needs to be invited by the admin to CloudOne Conformity.
 - [X] Groups
 - [X] Communication channel settings
+  - **Note**: The tool cannot migrate Jira, ServiceNow or ZenDesk Communication Settings, for these, it has to be migrated manually.
 - [X] Profiles
 - [X] Report Configs
 
@@ -109,6 +130,7 @@ Migrates your visiblity information in cloudconformity.com to cloudone.trendmicr
 - [X] Account Rule settings
   - **Limitation:** The API only allows writing a single note to the rule so the tool won't be able to preserve the history of notes. The tool will instead combine history of notes into a single note before writing it.
 - [X] Communication channel settings
+  - **Note**: The tool cannot migrate Jira, ServiceNow or ZenDesk communication settings, for these, it has to be migrated manually.
 - [X] Checks
   - **Limitation:** The API only allows writing a single note to the check so the tool won't be able to preserve the history of notes. In addition to that, API only allows a maximum of 200 characters of note. The tool will only get the most recent note and truncate it to 200 characters before writing it.
 - [X] Report Configs
