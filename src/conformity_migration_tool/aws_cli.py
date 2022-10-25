@@ -14,6 +14,7 @@ from mypy_boto3_cloudformation.type_defs import (
     UpdateStackOutputTypeDef,
 )
 
+from .cli import include_exclude_accts, read_accts_file
 from .di import c1_conformity_api, legacy_conformity_api
 
 
@@ -24,16 +25,37 @@ class LegacyConformityAWSAccountInfo:
     old_external_id: str
 
 
-def get_legacy_conformity_aws_accounts_info() -> Iterable[
-    LegacyConformityAWSAccountInfo
-]:
+def get_legacy_conformity_aws_accounts_info(
+    include_accounts_file: str, exclude_accounts_file: str
+) -> Iterable[LegacyConformityAWSAccountInfo]:
+
+    include_accounts = (
+        read_accts_file(accounts_file=include_accounts_file)
+        if include_accounts_file
+        else None
+    )
+    exclude_accounts = (
+        read_accts_file(accounts_file=exclude_accounts_file)
+        if exclude_accounts_file
+        else None
+    )
+
     legacy_api = legacy_conformity_api()
     old_external_id = legacy_api.get_organisation_external_id()
     accts = [acct for acct in legacy_api.list_accounts() if acct.cloud_type == "aws"]
+    accts = include_exclude_accts(
+        legacy_accts=accts,
+        include_accts=include_accounts,
+        exclude_accts=exclude_accounts,
+    )
     for acct in accts:
+        aws_acct_id = acct.attributes.get("awsaccount-id")
+        if not aws_acct_id:
+            print(f"Skipping account {acct.name}. It doesn't have awsaccount-id")
+            continue
         yield LegacyConformityAWSAccountInfo(
             account_name=acct.name,
-            aws_account_number=acct.attributes["awsaccount-id"],
+            aws_account_number=aws_acct_id,
             old_external_id=old_external_id,
         )
 
@@ -51,7 +73,19 @@ def cli(ctx):
     help="Creates a csv file containing AWS accounts to be used for 'update-stack --csv-file' command option.",
 )
 @click.argument("csv-file")
-def generate_csv(csv_file: str):
+@click.option(
+    "--include-accounts-file",
+    required=False,
+    type=str,
+    help="CSV file containing accounts that will be the only ones included. Each row should consists of 2 fields: first is the account name and second is the environment as they appear on Conformity Dashboard. An empty file means the tool won't include any account.",
+)
+@click.option(
+    "--exclude-accounts-file",
+    required=False,
+    type=str,
+    help="CSV file containing accounts that will be excluded. Each row should consists of 2 fields: first is the account name and second is the environment as they appear on Conformity Dashboard.",
+)
+def generate_csv(csv_file: str, include_accounts_file: str, exclude_accounts_file: str):
     print(f"Generating CSV: {csv_file}")
     with open(csv_file, newline="", mode="w") as fh:
         csvw = csv.DictWriter(
@@ -72,7 +106,10 @@ def generate_csv(csv_file: str):
         )
         csvw.writeheader()
 
-        accts = get_legacy_conformity_aws_accounts_info()
+        accts = get_legacy_conformity_aws_accounts_info(
+            include_accounts_file=include_accounts_file,
+            exclude_accounts_file=exclude_accounts_file,
+        )
         for acct in accts:
             csvw.writerow(
                 {
@@ -177,6 +214,18 @@ def generate_csv(csv_file: str):
     default=None,
     help="Cross-Account Role name (e.g. OrganizationAccountAccessRole). The role should at least have the permissions necessary to update the Conformity stack.",
 )
+@click.option(
+    "--include-accounts-file",
+    required=False,
+    type=str,
+    help="CSV file containing accounts that will be the only ones included. Each row should consists of 2 fields: first is the account name and second is the environment as they appear on Conformity Dashboard. An empty file means the tool won't include any account.",
+)
+@click.option(
+    "--exclude-accounts-file",
+    required=False,
+    type=str,
+    help="CSV file containing accounts that will be excluded. Each row should consists of 2 fields: first is the account name and second is the environment as they appear on Conformity Dashboard.",
+)
 @click.pass_context
 def update_stack(
     ctx,
@@ -189,6 +238,8 @@ def update_stack(
     secret_key: str,
     session_token: str,
     cross_account_role_name: str,
+    include_accounts_file: str,
+    exclude_accounts_file: str,
 ):
     # region = ctx.obj["region"]
     # profile = ctx.obj["profile"]
@@ -224,7 +275,10 @@ def update_stack(
                 aws_session_token=session_token,
                 cross_account_role_name=cross_account_role_name,
             )
-            for acct in get_legacy_conformity_aws_accounts_info()
+            for acct in get_legacy_conformity_aws_accounts_info(
+                include_accounts_file=include_accounts_file,
+                exclude_accounts_file=exclude_accounts_file,
+            )
         )
 
     accts = list(accts)
