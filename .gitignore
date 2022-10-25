@@ -130,3 +130,5 @@ dmypy.json
 
 # prevents from being accidentally committed
 user_config.yml
+
+tmp/
