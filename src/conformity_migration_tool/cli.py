@@ -1,3 +1,4 @@
+import atexit
 import csv
 import os
 import time
@@ -1281,6 +1282,24 @@ def empty_c1():
         log.error(e)
         log.error(e.details)
         # raise e
+
+
+@atexit.register
+def warn_user_config():
+    user_conf_path = user_config_path()
+    if not user_conf_path.exists():
+        return
+    print(
+        """
+
+\033[32m!!! W A R N I N G !!!\033[0m"""
+    )
+    print(
+        f"""
+    The file {user_conf_path} contains your Conformity and Cloud One API Keys.
+    Please delete the file once you are done using this tool.
+    """
+    )
 
 
 if __name__ == "__main__":

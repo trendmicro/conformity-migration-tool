@@ -1,3 +1,4 @@
+import atexit
 import csv
 import json
 import multiprocessing as mp
@@ -526,6 +527,21 @@ def wait_for_update_stack(
 
 def pretty_print(obj):
     print(json.dumps(obj, indent=4, default=str))
+
+
+@atexit.register
+def warn_aws_creds():
+    print(
+        """
+
+\033[32m!!! W A R N I N G !!!\033[0m"""
+    )
+    print(
+        """
+    After you finish updating the stack, please make sure to delete
+    any generated CSV file that may contain your AWS credentials.
+    """
+    )
 
 
 if __name__ == "__main__":
