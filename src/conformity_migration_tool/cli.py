@@ -40,6 +40,12 @@ from .di import (
 )
 from .utils import str2bool
 
+# Threading module added threads
+import time
+import threading
+maximum_threads = 10
+wait_on_threads = 7
+
 log = logger()
 
 
@@ -848,6 +854,33 @@ def copy_account_rule_setting(
     )
 
 
+# Function to copy rule to be run inside thread
+def copy_rule_setting(**kwargs):
+
+    exec_migration_func(
+        lambda: copy_account_rule_setting(
+            legacy_api=kwargs['legacy_api'],
+            c1_api=kwargs['c1_api'],
+            legacy_acct_id=kwargs['legacy_acct_id'],
+            c1_acct_id=kwargs['c1_acct_id'],
+            rule=kwargs['rule'],
+            user_map=kwargs['user_map'],
+        )
+    )
+
+
+# Function to run threads based on the maximum_threads
+def launch_threads(command_array):
+    
+    threads = [threading.Thread(target=copy_rule_setting, kwargs=command) for command in command_array]
+
+    for thread in threads:
+        thread.start()
+
+    for thread in threads:
+        thread.join()
+
+
 def copy_account_rules_settings(
     legacy_api: LegacyConformityAPI,
     c1_api: CloudOneConformityAPI,
@@ -858,17 +891,28 @@ def copy_account_rules_settings(
 ):
 
     user_map = {user.user_id: user for user in legacy_users}
+
+    # Use threads to copy rules; 
+    # Threads can be controlled via maximum_threads and wait_on_threads; but it's set to optimum atm based on some benchmarks
+
+    command_array = []
+
     for rule in legacy_acct_details.rules:
-        exec_migration_func(
-            lambda: copy_account_rule_setting(
-                legacy_api=legacy_api,
-                c1_api=c1_api,
-                legacy_acct_id=legacy_acct_id,
-                c1_acct_id=c1_acct_id,
-                rule=rule,
-                user_map=user_map,
-            )
-        )
+        
+        rule_setting_args = {'legacy_api': legacy_api, 'c1_api': c1_api, 'legacy_acct_id': legacy_acct_id, 
+                             'c1_acct_id': c1_acct_id, 'rule': rule, 'user_map': user_map}
+        
+        command_array.append(rule_setting_args)
+        # Check whether threads reach the maximum threads
+        if len(command_array) == maximum_threads:
+            launch_threads(command_array)
+            command_array = []
+            while threading.active_count() > wait_on_threads:
+                time.sleep(1)
+
+    if len(command_array) > 0:
+        launch_threads(command_array)
+        command_array = []
 
 
 def truncate_txt_to_length(txt: str, length=-1, truncated_suffix="") -> str:
