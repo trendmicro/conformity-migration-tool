@@ -4,7 +4,7 @@ REQUIRES = [
     "typing_extensions>=4.0.0",
     "requests>=2.0.0,<3.0.0",
     "PyYAML>=6.0,<7.0",
-    "deepdiff>=5.7.0,<6.0.0",
+    "deepdiff>=5.7.0,<9.0.0",
     "backoff>=1.11.1",
     "vcrpy>=4.0.0,<5.0.0",
     # cli dependencies below
